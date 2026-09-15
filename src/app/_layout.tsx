@@ -1,9 +1,11 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useColorScheme } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AnimatedGradientBackground } from '@/components/animated-gradient-background';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { WatchlistProvider } from '@/hooks/use-watchlist';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -40,10 +42,22 @@ export default function RootLayout() {
   const navigationTheme = { ...baseTheme, colors: { ...baseTheme.colors, background: 'transparent' } };
 
   return (
-    <ThemeProvider value={navigationTheme}>
-      <AnimatedGradientBackground />
-      <AnimatedSplashOverlay />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: 'transparent' } }} />
-    </ThemeProvider>
+    // `GestureHandlerRootView` has to be the outermost view for any
+    // react-native-gesture-handler gesture to receive touches at all — on
+    // Android a gesture outside it silently never fires (the watchlist's
+    // swipe-to-mark-seen being the first one in this app). It needs
+    // `flex: 1`, or everything inside it collapses to zero height.
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider value={navigationTheme}>
+        {/* Above the Stack so the watchlist is shared by every screen that
+            reads it — the Home filter bar and the watchlist screen — rather
+            than each holding its own copy. */}
+        <WatchlistProvider>
+          <AnimatedGradientBackground />
+          <AnimatedSplashOverlay />
+          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: 'transparent' } }} />
+        </WatchlistProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

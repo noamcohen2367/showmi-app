@@ -1,15 +1,10 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  I18nManager,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { CategoryChip } from '@/components/category-chip';
+import { CategoryFilterSheet } from '@/components/category-filter-sheet';
+import { DateFilterSheet } from '@/components/date-filter-sheet';
+import { HomeTopBar } from '@/components/home-top-bar';
 import { HorizontalShowSection } from '@/components/horizontal-show-section';
 import { PromoBanner } from '@/components/promo-banner';
 import { ShowListItem } from '@/components/show-list-item';
@@ -17,6 +12,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useHomeFeed } from '@/hooks/use-home-feed';
+import { NO_DATE_FILTER, showMatchesDateFilter, type DateFilter } from '@/utils/date-filter';
+import type { HomeFeed } from '@/data/shows';
 
 /**
  * Tab 1 — Home/Discover (`app/(tabs)/index.tsx`).
@@ -33,15 +30,34 @@ import { useHomeFeed } from '@/hooks/use-home-feed';
  */
 export default function DiscoverScreen() {
   const result = useHomeFeed();
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [dateFilter, setDateFilter] = useState<DateFilter>(NO_DATE_FILTER);
+  const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
+  const [dateSheetOpen, setDateSheetOpen] = useState(false);
+  const [categorySheetOpen, setCategorySheetOpen] = useState(false);
 
   const filteredShows = useMemo(() => {
     if (result.status !== 'ready') return [];
-    if (!selectedCategory) return result.feed.all;
-    return result.feed.all.filter((show) =>
-      show.categories.includes(selectedCategory),
-    );
-  }, [result, selectedCategory]);
+    return result.feed.all.filter((show) => {
+      // Categories are OR'd within themselves but AND'd against the date:
+      // picking "מחזמר" + "ילדים" + "מחר" means "a musical or a kids' show,
+      // playing tomorrow" — which is what selecting both of each implies.
+      const matchesCategory =
+        categoryFilter.length === 0 ||
+        show.categories.some((category) => categoryFilter.includes(category));
+      return matchesCategory && showMatchesDateFilter(show, dateFilter);
+    });
+  }, [result, categoryFilter, dateFilter]);
+
+  // Read off the feed rather than hardcoded. The reference's pill names one
+  // city because that app scopes its whole catalogue to it; this app has no
+  // location filter at all, and its shows span several cities — so naming
+  // one of them would imply a scope that doesn't exist. If the data ever
+  // does narrow to a single city, the pill says so on its own.
+  const locationLabel = useMemo(() => {
+    if (result.status !== 'ready') return '';
+    const cities = new Set(result.feed.all.map((show) => show.theater.city));
+    return cities.size === 1 ? [...cities][0] : 'כל הערים';
+  }, [result]);
 
   if (result.status === 'loading') {
     return (
@@ -65,6 +81,40 @@ export default function DiscoverScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
+      {/* Outside the list, so it stays put while the feed scrolls under it —
+          the reference's top bar is fixed, and this also stops the bar from
+          being rebuilt every time the list header re-renders. The page's
+          old "גלה" title is gone: the reference has no screen heading, the
+          bar is the heading. */}
+      <View style={styles.topBar}>
+        <HomeTopBar
+          locationLabel={locationLabel}
+          dateFilter={dateFilter}
+          categoryFilter={categoryFilter}
+          onOpenDateFilter={() => setDateSheetOpen(true)}
+          onOpenCategoryFilter={() => setCategorySheetOpen(true)}
+          onClearAll={() => {
+            setDateFilter(NO_DATE_FILTER);
+            setCategoryFilter([]);
+          }}
+        />
+      </View>
+
+      <DateFilterSheet
+        visible={dateSheetOpen}
+        onClose={() => setDateSheetOpen(false)}
+        value={dateFilter}
+        onApply={setDateFilter}
+      />
+
+      <CategoryFilterSheet
+        visible={categorySheetOpen}
+        onClose={() => setCategorySheetOpen(false)}
+        categories={feed.categories}
+        value={categoryFilter}
+        onApply={setCategoryFilter}
+      />
+
       <FlatList
         style={styles.list}
         data={filteredShows}
@@ -76,32 +126,7 @@ export default function DiscoverScreen() {
         )}
         ItemSeparatorComponent={() => <View style={styles.listSeparator} />}
         contentContainerStyle={styles.listContent}
-        ListHeaderComponent={
-          <View style={styles.header}>
-            <ThemedText type="title" style={styles.pageTitle}>
-              גלה
-            </ThemedText>
-
-            <PromoBanner promos={feed.promos} />
-
-            <HorizontalShowSection
-              title="מוצעים עבורך"
-              shows={feed.suggested}
-            />
-            <HorizontalShowSection title="חדש ומעניין" shows={feed.fresh} />
-            <HorizontalShowSection title="מובילים" shows={feed.trending} />
-
-            <CategoriesRow
-              categories={feed.categories}
-              selected={selectedCategory}
-              onSelect={setSelectedCategory}
-            />
-
-            <ThemedText type="subtitle" style={styles.allShowsTitle}>
-              כל ההצגות
-            </ThemedText>
-          </View>
-        }
+        ListHeaderComponent={<FeedHeader feed={feed} />}
         ListEmptyComponent={
           <ThemedText themeColor="textSecondary" style={styles.emptyFilterText}>
             אין הצגות בקטגוריה הזו כרגע.
@@ -109,6 +134,31 @@ export default function DiscoverScreen() {
         }
       />
     </SafeAreaView>
+  );
+}
+
+/**
+ * Everything above the "all shows" list: the hero promo carousel and the 3
+ * curated rows.
+ *
+ * A component rather than the inline JSX element this used to be — an
+ * element is rebuilt on every render of the screen, which means every
+ * category tap was rebuilding the carousel and all 3 horizontal lists even
+ * though none of them depend on the selected category.
+ */
+function FeedHeader({ feed }: { feed: HomeFeed }) {
+  return (
+    <View style={styles.header}>
+      <PromoBanner promos={feed.promos} />
+
+      <HorizontalShowSection title="מוצעים עבורך" shows={feed.suggested} variant="featured" />
+      <HorizontalShowSection title="חדש ומעניין" shows={feed.fresh} />
+      <HorizontalShowSection title="מובילים" shows={feed.trending} />
+
+      <ThemedText type="subtitle" style={styles.allShowsTitle}>
+        כל ההצגות
+      </ThemedText>
+    </View>
   );
 }
 
@@ -120,42 +170,13 @@ function CenteredState({ children }: { children: ReactNode }) {
   );
 }
 
-type CategoriesRowProps = {
-  categories: string[];
-  selected: string | null;
-  onSelect: (category: string | null) => void;
-};
-
-function CategoriesRow({ categories, selected, onSelect }: CategoriesRowProps) {
-  // Same native RTL scroll-direction fix as `HorizontalShowSection` — see
-  // its comment for why a plain horizontal `ScrollView`/`FlatList` needs
-  // this on native but not on web.
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={I18nManager.isRTL ? styles.rtlMirror : undefined}
-      contentContainerStyle={[
-        styles.categoriesContent,
-        I18nManager.isRTL && styles.rtlMirror,
-      ]}
-    >
-      <CategoryChip
-        label="הכול"
-        selected={selected === null}
-        onPress={() => onSelect(null)}
-      />
-      {categories.map((category) => (
-        <CategoryChip
-          key={category}
-          label={category}
-          selected={selected === category}
-          onPress={() => onSelect(selected === category ? null : category)}
-        />
-      ))}
-    </ScrollView>
-  );
-}
+// `CategoriesRow` used to live here. It moved into `HomeTopBar`, where the
+// same chips now sit beside the location pill instead of below the carousel.
+// Its old mirroring applied `rtlMirror` to the ScrollView *and* its
+// `contentContainerStyle`, which double-flips the content as one block —
+// a different technique from the per-item flip `HorizontalShowSection`
+// uses, despite its comment claiming they were the same. `HomeTopBar`
+// uses the per-item version.
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -172,24 +193,19 @@ const styles = StyleSheet.create({
     paddingBottom: BottomTabInset + Spacing.four,
     gap: Spacing.three,
   },
+  // The top bar sits above the list now, so it owns the spacing that used
+  // to be `header`'s `paddingTop` (which existed to push the old "גלה"
+  // title down off the safe area — there's no title here any more).
+  topBar: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.three,
+  },
   header: {
     gap: Spacing.five,
-    // This was missing before — every other screen's title sits
-    // `Spacing.five` below the safe area via its own `safeArea` style; this
-    // screen's title is inside the FlatList's header instead, which had no
-    // equivalent top spacing of its own, so it sat noticeably higher than
-    // the other 3 tabs' titles.
-    paddingTop: Spacing.five,
     paddingBottom: Spacing.two,
-  },
-  pageTitle: {
-    fontSize: 34,
-    lineHeight: 40,
-    paddingHorizontal: Spacing.four,
-  },
-  categoriesContent: {
-    gap: Spacing.two,
-    paddingHorizontal: Spacing.four,
   },
   allShowsTitle: {
     fontSize: 20,

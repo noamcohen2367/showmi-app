@@ -1,11 +1,8 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, View, type ViewProps } from 'react-native';
-import Animated, {
-  interpolate,
-  interpolateColor,
-  useAnimatedProps,
-  useAnimatedStyle,
-} from 'react-native-reanimated';
+import { interpolate, interpolateColor } from 'react-native-reanimated';
+// TEMPORARILY DISABLED — see "AMBIENT ANIMATION DISABLED" below.
+// import Animated, { useAnimatedProps, useAnimatedStyle } from 'react-native-reanimated';
 
 import {
   DARK_MID_ALPHA,
@@ -13,11 +10,13 @@ import {
   LIGHT_MID_ALPHA,
   LIGHT_TOP_ALPHA,
   MID_LOCATION_RANGE,
-  withAlpha,
+  // TEMPORARILY DISABLED — only `baseStops` used this. Restore with it.
+  // withAlpha,
 } from '@/constants/gradient-palette';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useGradientMotion } from '@/hooks/use-gradient-motion';
+// TEMPORARILY DISABLED — see "AMBIENT ANIMATION DISABLED" below.
+// import { useGradientMotion } from '@/hooks/use-gradient-motion';
 
 /**
  * `expo-linear-gradient`'s `colors`/`locations` are plain component props,
@@ -28,26 +27,41 @@ import { useGradientMotion } from '@/hooks/use-gradient-motion';
  * through Fabric directly, with no DOM involved — see `.web.tsx` for why
  * the *web* build can't use this same technique on this component.
  */
-const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
+// TEMPORARILY DISABLED — see "AMBIENT ANIMATION DISABLED" below.
+// const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
 
 /**
- * The 3 gradient stops (top → middle → bottom) for one theme, at rest.
- * Marked `'worklet'` — called from inside `useAnimatedProps` below (as well
- * as plainly, for the static initial `colors` prop); see `withAlpha`'s doc
- * comment for why that's required on native.
+ * Where in the ambient loop the frozen gradient sits, while the animation is
+ * disabled (see "AMBIENT ANIMATION DISABLED" below). 0.5 — the midpoint —
+ * is the same still frame `useGradientMotion` picks under Reduce Motion.
  */
-function baseStops(
-  theme: { primary: string; background: string },
-  topAlpha: number,
-  midAlpha: number,
-) {
-  'worklet';
-  return [
-    withAlpha(theme.primary, topAlpha),
-    withAlpha(theme.primary, midAlpha),
-    theme.background,
-  ] as const;
+const FROZEN_PROGRESS = 0.5;
+
+/** The value one of the palette's `[from, to]` ranges holds while frozen. */
+function frozen([from, to]: readonly [number, number]) {
+  return from + (to - from) * FROZEN_PROGRESS;
 }
+
+// TEMPORARILY DISABLED — only the (now commented out) animated path used
+// this; the frozen path builds all 3 stops through `blendStop` instead.
+// /**
+//  * The 3 gradient stops (top → middle → bottom) for one theme, at rest.
+//  * Marked `'worklet'` — called from inside `useAnimatedProps` below (as well
+//  * as plainly, for the static initial `colors` prop); see `withAlpha`'s doc
+//  * comment for why that's required on native.
+//  */
+// function baseStops(
+//   theme: { primary: string; background: string },
+//   topAlpha: number,
+//   midAlpha: number,
+// ) {
+//   'worklet';
+//   return [
+//     withAlpha(theme.primary, topAlpha),
+//     withAlpha(theme.primary, midAlpha),
+//     theme.background,
+//   ] as const;
+// }
 
 /**
  * Overwrites the alpha component of an `interpolateColor` result.
@@ -144,49 +158,77 @@ export function AnimatedGradientBackground({
 }: AnimatedGradientBackgroundProps) {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
-  const { progress, themeProgress } = useGradientMotion(isDark);
 
-  const animatedProps = useAnimatedProps(() => {
-    'worklet';
-    const midLocation = interpolate(progress.value, [0, 1], MID_LOCATION_RANGE);
-    const lightTopAlpha = interpolate(progress.value, [0, 1], LIGHT_TOP_ALPHA);
-    const lightMidAlpha = interpolate(progress.value, [0, 1], LIGHT_MID_ALPHA);
-    const darkTopAlpha = interpolate(progress.value, [0, 1], DARK_TOP_ALPHA);
-    const darkMidAlpha = interpolate(progress.value, [0, 1], DARK_MID_ALPHA);
-    const t = themeProgress.value;
-    return {
-      colors: [
-        blendStop(
-          Colors.light.primary,
-          lightTopAlpha,
-          Colors.dark.primary,
-          darkTopAlpha,
-          t,
-        ),
-        blendStop(
-          Colors.light.primary,
-          lightMidAlpha,
-          Colors.dark.primary,
-          darkMidAlpha,
-          t,
-        ),
-        interpolateColor(
-          t,
-          [0, 1],
-          [Colors.light.background, Colors.dark.background],
-        ),
-      ] as const,
-      locations: [0, midLocation, 1] as const,
-    };
-  });
+  // ─── AMBIENT ANIMATION DISABLED (temporary, diagnostic) ──────────────
+  // Frozen deliberately, to isolate how much of the Home screen's scroll
+  // jank is this component. The gradient still renders — same stops, same
+  // colors, same light/dark behaviour — it just no longer recomputes its
+  // `colors`/`locations` every frame, so the full-screen shader is painted
+  // once per theme change instead of ~60×/second forever.
+  //
+  // Frozen at the loop's midpoint (`FROZEN_PROGRESS = 0.5`), which is the
+  // same still frame `useGradientMotion` already picks for Reduce Motion —
+  // so this is a state the design was built to look correct in, not an
+  // arbitrary one.
+  //
+  // What's lost while disabled: the 20s ambient drift, and the 500ms
+  // light↔dark crossfade (theme changes now snap). Nothing else.
+  //
+  // TO RESTORE: uncomment the block below and the 4 commented imports /
+  // `AnimatedLinearGradient` at the top of this file, then delete the
+  // static path underneath. Nothing else in the app references these.
+  //
+  // const { progress, themeProgress } = useGradientMotion(isDark);
+  //
+  // const animatedProps = useAnimatedProps(() => {
+  //   'worklet';
+  //   const midLocation = interpolate(progress.value, [0, 1], MID_LOCATION_RANGE);
+  //   const lightTopAlpha = interpolate(progress.value, [0, 1], LIGHT_TOP_ALPHA);
+  //   const lightMidAlpha = interpolate(progress.value, [0, 1], LIGHT_MID_ALPHA);
+  //   const darkTopAlpha = interpolate(progress.value, [0, 1], DARK_TOP_ALPHA);
+  //   const darkMidAlpha = interpolate(progress.value, [0, 1], DARK_MID_ALPHA);
+  //   const t = themeProgress.value;
+  //   return {
+  //     colors: [
+  //       blendStop(Colors.light.primary, lightTopAlpha, Colors.dark.primary, darkTopAlpha, t),
+  //       blendStop(Colors.light.primary, lightMidAlpha, Colors.dark.primary, darkMidAlpha, t),
+  //       interpolateColor(t, [0, 1], [Colors.light.background, Colors.dark.background]),
+  //     ] as const,
+  //     locations: [0, midLocation, 1] as const,
+  //   };
+  // });
+  //
+  // const backdropStyle = useAnimatedStyle(() => ({
+  //   backgroundColor: interpolateColor(
+  //     themeProgress.value,
+  //     [0, 1],
+  //     [Colors.light.background, Colors.dark.background],
+  //   ),
+  // }));
+  // ─────────────────────────────────────────────────────────────────────
 
-  const backdropStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(
-      themeProgress.value,
-      [0, 1],
-      [Colors.light.background, Colors.dark.background],
+  // The frozen equivalent of the worklet above: same `blendStop` math, with
+  // `progress` pinned to FROZEN_PROGRESS and `themeProgress` pinned to the
+  // current theme, evaluated once per render instead of once per frame.
+  const t = isDark ? 1 : 0;
+  const background = isDark ? Colors.dark.background : Colors.light.background;
+  const colors = [
+    blendStop(
+      Colors.light.primary,
+      frozen(LIGHT_TOP_ALPHA),
+      Colors.dark.primary,
+      frozen(DARK_TOP_ALPHA),
+      t,
     ),
-  }));
+    blendStop(
+      Colors.light.primary,
+      frozen(LIGHT_MID_ALPHA),
+      Colors.dark.primary,
+      frozen(DARK_MID_ALPHA),
+      t,
+    ),
+    background,
+  ] as const;
 
   return (
     <View
@@ -194,16 +236,15 @@ export function AnimatedGradientBackground({
       pointerEvents="none"
       {...rest}
     >
-      <Animated.View
+      <View
         pointerEvents="none"
-        style={[StyleSheet.absoluteFill, backdropStyle]}
+        style={[StyleSheet.absoluteFill, { backgroundColor: background }]}
       />
-      <AnimatedLinearGradient
+      <LinearGradient
         pointerEvents="none"
         style={StyleSheet.absoluteFill}
-        colors={baseStops(Colors.light, LIGHT_TOP_ALPHA[0], LIGHT_MID_ALPHA[0])}
-        locations={[0, MID_LOCATION_RANGE[0], 1]}
-        animatedProps={animatedProps}
+        colors={colors}
+        locations={[0, frozen(MID_LOCATION_RANGE), 1]}
       />
     </View>
   );

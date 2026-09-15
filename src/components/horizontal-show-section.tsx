@@ -1,5 +1,6 @@
 import { FlatList, I18nManager, StyleSheet, View } from 'react-native';
 
+import { FeaturedShowCard } from './featured-show-card';
 import { ShowCard } from './show-card';
 import { ThemedText } from './themed-text';
 
@@ -9,6 +10,13 @@ import type { Show } from '@/types/show';
 type HorizontalShowSectionProps = {
   title: string;
   shows: Show[];
+  /**
+   * `compact` is the default poster row. `featured` swaps in the
+   * double-width card with its details overlaid on the artwork — meant for
+   * one lead row per screen, not for every row, since the whole point is
+   * that it outweighs the rows around it.
+   */
+  variant?: 'compact' | 'featured';
 };
 
 /**
@@ -20,7 +28,7 @@ type HorizontalShowSectionProps = {
  * cards actually near the viewport — matters once this is backed by a real,
  * possibly-long API response instead of a handful of mock shows.
  */
-export function HorizontalShowSection({ title, shows }: HorizontalShowSectionProps) {
+export function HorizontalShowSection({ title, shows, variant = 'compact' }: HorizontalShowSectionProps) {
   if (shows.length === 0) return null;
 
   return (
@@ -43,7 +51,7 @@ export function HorizontalShowSection({ title, shows }: HorizontalShowSectionPro
         keyExtractor={(show) => show.id}
         renderItem={({ item }) => (
           <View style={I18nManager.isRTL ? styles.rtlMirror : undefined}>
-            <ShowCard show={item} />
+            {variant === 'featured' ? <FeaturedShowCard show={item} /> : <ShowCard show={item} />}
           </View>
         )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}

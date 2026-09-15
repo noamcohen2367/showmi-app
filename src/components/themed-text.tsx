@@ -22,7 +22,12 @@ export function ThemedText({ style, type = 'default', themeColor, ...rest }: The
         type === 'smallBold' && styles.smallBold,
         type === 'subtitle' && styles.subtitle,
         type === 'link' && styles.link,
-        type === 'linkPrimary' && styles.linkPrimary,
+        // `linkPrimary`'s color is theme-dependent, so it can't live in the
+        // static `StyleSheet` below (where it was hardcoded as `#3c87f7`) —
+        // it has to be read from the theme at render time like every other
+        // color in this component. Still placed before `style`, so a caller
+        // passing its own `color` keeps overriding it.
+        type === 'linkPrimary' && { color: theme.link },
         type === 'code' && styles.code,
         style,
       ]}
@@ -73,7 +78,6 @@ const styles = StyleSheet.create({
   linkPrimary: {
     lineHeight: 30,
     fontSize: 14,
-    color: '#3c87f7',
   },
   code: {
     fontFamily: Fonts.mono,

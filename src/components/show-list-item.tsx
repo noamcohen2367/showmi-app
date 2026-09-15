@@ -27,6 +27,10 @@ export function ShowListItem({ show }: ShowListItemProps) {
         style={styles.image}
         contentFit="cover"
         transition={150}
+        // See `ShowCard` for why the default `cachePolicy="disk"` isn't
+        // enough here, and why a recycled cell needs `recyclingKey`.
+        cachePolicy="memory-disk"
+        recyclingKey={show.id}
         accessibilityLabel={show.name}
       />
       <View style={styles.text}>

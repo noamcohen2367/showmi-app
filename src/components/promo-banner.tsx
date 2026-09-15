@@ -17,6 +17,23 @@ import type { Promo } from '@/data/shows';
 const AUTO_ADVANCE_INTERVAL_MS = 2000;
 const BANNER_ASPECT_RATIO = 2;
 
+/**
+ * How much of the *next* promo stays visible past the edge of the current
+ * one. The reference's hero carousel shows this sliver deliberately: it's
+ * what tells you the card is swipeable at all, which a full-bleed paging
+ * banner has to rely on the dots alone to communicate.
+ */
+const PEEK_WIDTH = 20;
+
+/** How far the hero card sits in from the screen edges. */
+const SIDE_INSET = Spacing.three;
+
+/** Gap between one hero card and the next. */
+const CARD_GAP = Spacing.two;
+
+/** Corner radius of the hero card — the reference's ~20-24px treatment. */
+const CARD_RADIUS = Spacing.four;
+
 type PromoBannerProps = {
   promos: Promo[];
 };
@@ -73,12 +90,17 @@ export function PromoBanner({ promos }: PromoBannerProps) {
     // it doesn't need the same shared-value treatment — it just keeps
     // `activeIndex` in sync either way.
     if (containerWidth === 0) return;
+    // Recomputed here rather than read from the `const` below, so this stays
+    // correct no matter where in the body that value ends up living. One
+    // "page" is the snap interval (card + gap), not the viewport width —
+    // those stopped being the same thing once the card gained its peek.
+    const pageWidth = containerWidth - PEEK_WIDTH + CARD_GAP;
     // `.value` on a reanimated SharedValue is an intentionally mutable ref
     // (that's the whole API), not React state; this rule doesn't know the
     // difference from an effect dependency that's actually meant to stay
     // immutable.
     // eslint-disable-next-line react-hooks/immutability
-    activeIndex.value = Math.round(event.nativeEvent.contentOffset.x / containerWidth);
+    activeIndex.value = Math.round(event.nativeEvent.contentOffset.x / pageWidth);
   }
 
   // The outer `container`'s `aspectRatio` style (below) computes its own
@@ -90,28 +112,59 @@ export function PromoBanner({ promos }: PromoBannerProps) {
   // Yoga does on native. So the height is computed here instead, once, from
   // the same measured width, and applied explicitly everywhere it's needed
   // (the list itself, each slide, the image) rather than left to cascade.
-  const bannerHeight = containerWidth / BANNER_ASPECT_RATIO;
+  // The card is narrower than the viewport by exactly the sliver of the next
+  // card left showing, so `cardWidth + CARD_GAP` is both the snap interval
+  // and what one "page" means to the auto-advance timer below.
+  const cardWidth = containerWidth - PEEK_WIDTH;
+  const cardHeight = cardWidth / BANNER_ASPECT_RATIO;
+  const snapInterval = cardWidth + CARD_GAP;
 
   return (
-    <View style={styles.container} onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}>
-      {containerWidth > 0 && (
+    <View style={styles.container}>
+      {/* The inset lives on `container` (outer), but the measurement has to
+          happen *inside* it: `onLayout` reports the border box, which would
+          include that padding and make every width below `SIDE_INSET * 2`
+          too wide. Measuring the inner track instead keeps `cardWidth`,
+          `snapInterval` and `getItemLayout` all derived from the same
+          number the list actually has to work with — which is what makes
+          `scrollToIndex` from the auto-advance land exactly on a card. */}
+      <View onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}>
+        {containerWidth > 0 && (
         <FlatList
           ref={listRef}
-          style={[{ height: bannerHeight }, I18nManager.isRTL && styles.rtlMirror]}
+          style={[{ height: cardHeight }, I18nManager.isRTL && styles.rtlMirror]}
           data={promos}
           keyExtractor={(promo) => promo.id}
           horizontal
-          pagingEnabled
+          // `snapToInterval` rather than `pagingEnabled`: paging snaps to
+          // multiples of the *viewport* width, which is now wider than a
+          // card, so every swipe would drift further out of alignment.
+          snapToInterval={snapInterval}
+          snapToAlignment="start"
+          decelerationRate="fast"
           showsHorizontalScrollIndicator={false}
           onMomentumScrollEnd={handleMomentumScrollEnd}
-          getItemLayout={(_, index) => ({ length: containerWidth, offset: containerWidth * index, index })}
+          getItemLayout={(_, index) => ({ length: snapInterval, offset: snapInterval * index, index })}
+          ItemSeparatorComponent={() => <View style={styles.cardSeparator} />}
           renderItem={({ item }) => (
-            <View style={[{ width: containerWidth, height: bannerHeight }, I18nManager.isRTL && styles.rtlMirror]}>
-              <Image source={{ uri: item.imageUrl }} style={styles.image} contentFit="cover" transition={150} />
+            <View style={[{ width: cardWidth, height: cardHeight }, I18nManager.isRTL && styles.rtlMirror]}>
+              <Image
+                source={{ uri: item.imageUrl }}
+                style={styles.image}
+                contentFit="cover"
+                transition={150}
+                // Same reasoning as `ShowCard` — and it matters more here,
+                // since the auto-advance cycles back through these same 4
+                // images every few seconds for as long as the screen is open.
+                cachePolicy="memory-disk"
+                recyclingKey={item.id}
+              />
             </View>
           )}
         />
-      )}
+        )}
+      </View>
+
       <View style={styles.dots} pointerEvents="none">
         {promos.map((promo, index) => (
           <PromoDot key={promo.id} index={index} activeIndex={activeIndex} />
@@ -137,14 +190,21 @@ function PromoDot({ index, activeIndex }: PromoDotProps) {
 
 const styles = StyleSheet.create({
   container: {
-    aspectRatio: 2,
+    // No `aspectRatio` any more: the card no longer fills the container
+    // (it's inset by `PEEK_WIDTH`) and the dots now sit *below* it rather
+    // than floating over it, so the container has to size to its content
+    // instead of dictating a fixed shape to it.
+    gap: Spacing.two,
+    paddingHorizontal: SIDE_INSET,
   },
   image: {
     flex: 1,
+    borderRadius: CARD_RADIUS,
+  },
+  cardSeparator: {
+    width: CARD_GAP,
   },
   dots: {
-    position: 'absolute',
-    bottom: Spacing.two,
     alignSelf: 'center',
     flexDirection: 'row',
     gap: Spacing.one,
