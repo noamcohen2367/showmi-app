@@ -1,115 +1,88 @@
-import {
-  Tabs,
-  TabList,
-  TabTrigger,
-  TabSlot,
-  TabTriggerSlotProps,
-  TabListProps,
-} from 'expo-router/ui';
-import { SymbolView } from 'expo-symbols';
-import { Pressable, useColorScheme, View, StyleSheet } from 'react-native';
+import { TabList, TabSlot, TabTrigger, Tabs } from 'expo-router/ui';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
-import { ExternalLink } from './external-link';
-import { ThemedText } from './themed-text';
-import { ThemedView } from './themed-view';
+import { WebBottomTabBar } from './web-bottom-tab-bar';
+import { WebSideNav } from './web-side-nav';
+import { WebTabTrigger } from './web-tab-trigger';
 
-import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+import { TAB_ROUTES } from '@/constants/tabs';
+import { WebBottomTabBarHeight, WebNavBreakpoint, WebSidebarWidth } from '@/constants/theme';
 
+/**
+ * Web navigation shell.
+ *
+ * `expo-router/unstable-native-tabs` (used by `app-tabs.tsx` on iOS/Android)
+ * has no web renderer worth shipping — it can't produce a real SwiftUI
+ * TabView or Material bottom nav in a browser — so web gets its own,
+ * fully custom implementation built from the headless `expo-router/ui`
+ * primitives (`Tabs`/`TabList`/`TabTrigger`/`TabSlot`). Metro picks this file
+ * automatically for web bundles because of the `.web.tsx` extension; iOS and
+ * Android keep using `app-tabs.tsx`. See `app/(tabs)/_layout.tsx`.
+ *
+ * Both this file and `app-tabs.tsx` read the same `TAB_ROUTES` config, so
+ * the routes/labels/icons can never drift between platforms — only the
+ * chrome around them differs.
+ */
 export default function AppTabs() {
+  // -------------------------------------------------------------------
+  // THE single decision point for which web nav layout to render.
+  //
+  // `useWindowDimensions` (unlike a one-off `Dimensions.get('window')` read)
+  // subscribes to resize events, so this re-evaluates on every browser
+  // resize — dragging the window across the breakpoint flips the layout
+  // live, no reload needed.
+  //
+  //   width <  WebNavBreakpoint (~768px, phone-width browsers) -> bottom bar
+  //   width >= WebNavBreakpoint (tablet/desktop browsers)      -> sidebar
+  //
+  // 768px mirrors the common tablet-portrait breakpoint used by the rest of
+  // the responsive web ecosystem; see the accompanying write-up for the
+  // full tradeoff discussion (why 768, and why a sidebar over a top navbar
+  // for the wide case).
+  // -------------------------------------------------------------------
+  const { width } = useWindowDimensions();
+  const isWideLayout = width >= WebNavBreakpoint;
+
+  // The 4 tab triggers themselves are identical either way — only the
+  // container they render inside (bottom bar vs sidebar) and the button
+  // `variant` (compact-stacked vs roomy-inline) change.
+  const triggers = TAB_ROUTES.map((tab) => (
+    <TabTrigger key={tab.name} name={tab.name} href={tab.href} asChild>
+      <WebTabTrigger tab={tab} variant={isWideLayout ? 'sidebar' : 'bottom'} />
+    </TabTrigger>
+  ));
+
   return (
-    <Tabs>
-      <TabSlot style={{ height: '100%' }} />
+    <Tabs style={styles.tabs}>
       <TabList asChild>
-        <CustomTabList>
-          <TabTrigger name="home" href="/" asChild>
-            <TabButton>Home</TabButton>
-          </TabTrigger>
-          <TabTrigger name="explore" href="/explore" asChild>
-            <TabButton>Explore</TabButton>
-          </TabTrigger>
-        </CustomTabList>
+        {isWideLayout ? <WebSideNav>{triggers}</WebSideNav> : <WebBottomTabBar>{triggers}</WebBottomTabBar>}
       </TabList>
+
+      {/* Reserve space for whichever nav is currently showing so its fixed
+          position never overlaps the active screen's content. Screens under
+          app/(tabs)/ stay 100% platform-agnostic — this is the only place
+          that compensates for the web-only chrome around them. The sidebar
+          sits on the right (the app is RTL — see `web-side-nav.tsx`), so
+          this reserves `paddingRight`, not `paddingLeft`. */}
+      <View
+        style={[
+          styles.content,
+          isWideLayout ? { paddingRight: WebSidebarWidth } : { paddingBottom: WebBottomTabBarHeight },
+        ]}>
+        <TabSlot style={styles.slot} />
+      </View>
     </Tabs>
   );
 }
 
-export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
-  return (
-    <Pressable {...props} style={({ pressed }) => pressed && styles.pressed}>
-      <ThemedView
-        type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
-        style={styles.tabButtonView}>
-        <ThemedText type="small" themeColor={isFocused ? 'text' : 'textSecondary'}>
-          {children}
-        </ThemedText>
-      </ThemedView>
-    </Pressable>
-  );
-}
-
-export function CustomTabList(props: TabListProps) {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
-
-  return (
-    <View {...props} style={styles.tabListContainer}>
-      <ThemedView type="backgroundElement" style={styles.innerContainer}>
-        <ThemedText type="smallBold" style={styles.brandText}>
-          Expo Starter
-        </ThemedText>
-
-        {props.children}
-
-        <ExternalLink href="https://docs.expo.dev" asChild>
-          <Pressable style={styles.externalPressable}>
-            <ThemedText type="link">Docs</ThemedText>
-            <SymbolView
-              tintColor={colors.text}
-              name={{ ios: 'arrow.up.right.square', web: 'link' }}
-              size={12}
-            />
-          </Pressable>
-        </ExternalLink>
-      </ThemedView>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  tabListContainer: {
-    position: 'absolute',
-    width: '100%',
-    padding: Spacing.three,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'row',
+  tabs: {
+    flex: 1,
   },
-  innerContainer: {
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.five,
-    borderRadius: Spacing.five,
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexGrow: 1,
-    gap: Spacing.two,
-    maxWidth: MaxContentWidth,
+  content: {
+    flex: 1,
   },
-  brandText: {
-    marginRight: 'auto',
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  tabButtonView: {
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.three,
-  },
-  externalPressable: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: Spacing.one,
-    marginLeft: Spacing.three,
+  slot: {
+    flex: 1,
   },
 });

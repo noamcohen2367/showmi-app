@@ -5,9 +5,11 @@ node_modules/
 
 # Expo
 .expo/
+.expo-shared/
 dist/
 web-build/
 expo-env.d.ts
+.eas-build-local-*
 
 # Native
 .kotlin/
@@ -17,6 +19,9 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+*.apk
+*.aab
+*.ipa
 
 # Metro
 .metro-health-check*
@@ -25,13 +30,27 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+pnpm-debug.*
+*.log
+logs/
 
-# macOS
+# OS
 .DS_Store
+Thumbs.db
 *.pem
 
-# local env files
-.env*.local
+# env files (keep the committed template)
+.env
+.env.*
+!.env.example
+
+# editor / tooling local overrides
+.idea/
+*.iml
+.claude/settings.local.json
+
+# test output
+coverage/
 
 # typescript
 *.tsbuildinfo
