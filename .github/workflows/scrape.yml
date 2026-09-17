@@ -1,0 +1,33 @@
+name: Scrape theater schedules
+
+on:
+  schedule:
+    # GitHub cron is UTC: 03:00 and 13:00 UTC ≈ 06:00 and 16:00 in Israel.
+    - cron: '0 3,13 * * *'
+  workflow_dispatch: # "Run workflow" button, for testing
+
+concurrency:
+  group: scrape
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: scraper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scraper/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run scrape
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SCRAPER_CONTACT: ${{ secrets.SCRAPER_CONTACT }}
