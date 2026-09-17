@@ -13,12 +13,14 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 
+import { cameriAdapter } from './adapters/cameri.js';
 import { habimaAdapter } from './adapters/habima.js';
+import { lessinAdapter } from './adapters/lessin.js';
 import { activeShowCount, createDb, syncTheater } from './db.js';
 import { sanityProblems } from './lib/sanity.js';
 import type { Adapter } from './types.js';
 
-const ADAPTERS: Adapter[] = [habimaAdapter];
+const ADAPTERS: Adapter[] = [habimaAdapter, cameriAdapter, lessinAdapter];
 
 const { values } = parseArgs({
   options: {

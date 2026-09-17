@@ -20,7 +20,7 @@ create table public.shows (
   dominant_color text,                  -- '#RRGGBB', optional (see Show.dominantColor)
   genre_label    text,                  -- the theater's own free text, e.g. 'קומדיה רומנטית עם שירים'
   categories     text[] not null default '{}',  -- normalised, what the app filters by
-  performers     jsonb not null default '[]',   -- [{ "name": "...", "role": "..." }]
+  performers     jsonb not null default '[]',   -- [{ "name", "role", "photoUrl"?, "profileUrl"? }]
   credits        jsonb not null default '[]',   -- [{ "name": "...", "role": "בימוי" }]
   is_active      boolean not null default true, -- false once the theater stops listing it
   first_seen_at  timestamptz not null default now(),
@@ -38,6 +38,7 @@ create table public.showtimes (
   starts_at     timestamp not null,
   purchase_url  text not null,
   hall          text,
+  subtitles     text,                   -- e.g. 'English subtitles' (Cameri)
   last_seen_at  timestamptz not null default now()
 );
 

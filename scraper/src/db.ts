@@ -68,6 +68,7 @@ export async function syncTheater(db: SupabaseClient, theaterId: TheaterId, show
       starts_at: showtime.startsAt,
       purchase_url: showtime.purchaseUrl,
       hall: showtime.hall ?? null,
+      subtitles: showtime.subtitles ?? null,
       last_seen_at: runAt,
     })),
   );
