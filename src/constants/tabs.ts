@@ -71,9 +71,13 @@ export const TAB_ROUTES: readonly TabRouteConfig[] = [
   {
     name: 'favorites',
     href: '/favorites',
-    label: 'מועדפים',
-    sfSymbol: { default: 'heart', selected: 'heart.fill' },
-    vectorIcon: { family: Ionicons, default: 'heart-outline', selected: 'heart' },
+    label: 'רשימת צפייה',
+    // A bookmark, not a heart: this tab is a save-for-later list split into
+    // "רוצה לראות" / "ראיתי", so it reads as marking something to come back
+    // to rather than declaring affection for it. A heart also collides with
+    // the "like" meaning it carries nearly everywhere else.
+    sfSymbol: { default: 'bookmark', selected: 'bookmark.fill' },
+    vectorIcon: { family: Ionicons, default: 'bookmark-outline', selected: 'bookmark' },
   },
   {
     name: 'profile',
@@ -84,7 +88,7 @@ export const TAB_ROUTES: readonly TabRouteConfig[] = [
     // Ionicons has no mustache glyph, so Android + web fall back to
     // SimpleLineIcons for this one tab — its whole set is a single
     // thin-line style, so there's no separate selected/filled variant;
-    // the purple tint alone communicates the selected state instead.
+    // the accent tint alone communicates the selected state instead.
     vectorIcon: { family: SimpleLineIcons, default: 'mustache', selected: 'mustache' },
   },
 ] as const;

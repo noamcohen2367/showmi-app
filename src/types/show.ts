@@ -42,6 +42,16 @@ export type Show = {
   actors: Actor[];
   /** Poster/production photos, at least one. First image is the "hero" one. */
   images: string[];
+  /**
+   * Dominant color of `images[0]`, as `#RRGGBB` — used to tint the featured
+   * card's scrim so the card picks up the poster's own palette.
+   *
+   * Optional, and safe to omit: a card with no color (or a malformed one)
+   * falls back to the plain black scrim. Never used raw — see
+   * `utils/scrim-tint.ts`, which darkens it until white text over it is
+   * guaranteed legible, because a sampled color can be arbitrarily pale.
+   */
+  dominantColor?: string;
   /** e.g. "קומדיה", "מחזמר" — also what the Home screen's category filter groups by. */
   categories: string[];
   /** Sorted ascending; a show past all its dates just has an empty array. */

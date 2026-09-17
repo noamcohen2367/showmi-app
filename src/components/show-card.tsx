@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from './themed-text';
@@ -23,10 +24,15 @@ type ShowCardProps = {
  * `Pressable` today only for the touch-feedback opacity, not a real link.
  */
 export function ShowCard({ show }: ShowCardProps) {
+  const router = useRouter();
   const next = nextUpcomingShowtime(show.showtimes);
 
   return (
-    <Pressable style={({ pressed }) => [styles.container, pressed && styles.pressed]} accessibilityRole="button">
+    <Pressable
+      onPress={() => router.push({ pathname: '/show/[id]', params: { id: show.id } })}
+      style={({ pressed }) => [styles.container, pressed && styles.pressed]}
+      accessibilityRole="button"
+      accessibilityLabel={show.name}>
       <Image
         source={{ uri: show.images[0] }}
         style={styles.image}

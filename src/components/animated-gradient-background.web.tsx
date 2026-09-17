@@ -120,7 +120,12 @@ export function AnimatedGradientBackground({ style, ...rest }: AnimatedGradientB
       // isn't). See the native file's doc comment for the fuller version of
       // this same bug.
       backgroundColor: bottom,
-      backgroundImage: `linear-gradient(180deg, ${top} 0%, ${mid} ${midLocation}%, ${bottom} 100%)`,
+      // `0deg` is bottom-to-top in CSS, matching the `start`/`end` flip on
+      // the native implementation — see its comment for why the accent is
+      // anchored to the bottom edge rather than the top. Keep the two in
+      // step: the whole point of this file is that it looks identical to
+      // the native one.
+      backgroundImage: `linear-gradient(0deg, ${top} 0%, ${mid} ${midLocation}%, ${bottom} 100%)`,
     } as ViewStyle;
   });
 

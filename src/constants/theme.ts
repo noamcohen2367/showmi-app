@@ -61,6 +61,50 @@ const OnPhoto = {
   scrim: '#000000',
 } as const;
 
+/* ─────────────────────────────────────────────────────────────────────────
+ * CATEGORY TINTS — the gradients behind the Search screen's category cards.
+ *
+ * These are the one place the app uses colours that are NOT the brand accent,
+ * and that is a deliberate exception, not drift. Their job is to make six
+ * cards in a grid tellable apart at a glance; six shades of one accent would
+ * read as six copies of the same card. They are identity colours for content,
+ * never UI state — nothing selected, active, or interactive is ever tinted
+ * with one.
+ *
+ * Deliberately no purple in the set.
+ *
+ * Every pair is dark enough for white label text: the lightest stop of the
+ * lightest pair still clears 4.5:1 against `OnPhoto.text`. If you add a pair,
+ * check it the same way before shipping it.
+ *
+ * Identical in light and dark for the same reason `OnPhoto` is — the label
+ * sits on the gradient, not on the app's background.
+ * ───────────────────────────────────────────────────────────────────────── */
+export const CategoryTints: readonly (readonly [string, string])[] = [
+  ['#9A3412', '#C2410C'], // terracotta — the accent's own family
+  ['#115E59', '#0F766E'], // teal
+  ['#1E3A8A', '#1D4ED8'], // deep blue
+  ['#9F1239', '#BE123C'], // crimson
+  ['#854D0E', '#A16207'], // amber
+  ['#3F6212', '#4D7C0F'], // olive
+] as const;
+
+/**
+ * Picks a tint for a category name, stably.
+ *
+ * Hashed from the name rather than taken by array index, so a category keeps
+ * its colour when the API returns the list in a different order or adds one
+ * in the middle — otherwise every card on the screen would change colour
+ * whenever the catalogue changed.
+ */
+export function categoryTint(name: string): readonly [string, string] {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  }
+  return CategoryTints[hash % CategoryTints.length];
+}
+
 /**
  * `#RRGGBB` + alpha → `rgba(r, g, b, a)`. Used only to derive `primarySoft`
  * from the accent above, so the two can't fall out of sync.

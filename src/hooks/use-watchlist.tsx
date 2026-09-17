@@ -1,12 +1,17 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import {
+  createCustomId,
   watchlistBackend,
+  type CustomEntry,
   type WatchlistState,
   type WatchStatus,
 } from '@/data/watchlist-backend';
 
-export type { WatchStatus };
+export type { CustomEntry, WatchStatus };
+
+/** One hand-typed entry, paired with the id it lives under. */
+export type CustomWatchlistItem = CustomEntry & { id: string };
 
 type WatchlistContextValue = {
   /** `undefined` means the show isn't on the list at all. */
@@ -15,10 +20,18 @@ type WatchlistContextValue = {
   toggleSaved: (showId: string) => void;
   /** Moves a saved show between the two sections. */
   setStatus: (showId: string, status: WatchStatus) => void;
+  /**
+   * Records a show that isn't in the catalogue. Returns the id it was filed
+   * under, so a caller can act on it straight away.
+   */
+  addCustom: (entry: CustomEntry, status: WatchStatus) => string;
   remove: (showId: string) => void;
-  /** Ids in each section. Stable references while the state doesn't change. */
+  /** Catalogue-show ids in each section. */
   wantIds: readonly string[];
   seenIds: readonly string[];
+  /** Hand-typed entries in each section. */
+  customWant: readonly CustomWatchlistItem[];
+  customSeen: readonly CustomWatchlistItem[];
   /** False until the backend's first `load()` resolves. */
   ready: boolean;
 };
@@ -61,21 +74,37 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<WatchlistContextValue>(() => {
-    const wantIds = Object.keys(state).filter((id) => state[id] === 'want');
-    const seenIds = Object.keys(state).filter((id) => state[id] === 'seen');
+    const ids = Object.keys(state);
+    const inSection = (status: WatchStatus, custom: boolean) =>
+      ids.filter((id) => state[id].status === status && !!state[id].custom === custom);
+
+    const asItems = (matched: string[]): CustomWatchlistItem[] =>
+      // The `custom` field is guaranteed present here — `inSection` selected
+      // on exactly that — but the compiler can't see through the filter.
+      matched.map((id) => ({ id, ...(state[id].custom as CustomEntry) }));
 
     return {
       ready,
-      wantIds,
-      seenIds,
-      statusOf: (showId) => state[showId],
+      wantIds: inSection('want', false),
+      seenIds: inSection('seen', false),
+      customWant: asItems(inSection('want', true)),
+      customSeen: asItems(inSection('seen', true)),
+      statusOf: (showId) => state[showId]?.status,
       toggleSaved: (showId) => {
         const next = { ...state };
         if (next[showId]) delete next[showId];
-        else next[showId] = 'want';
+        else next[showId] = { status: 'want' };
         commit(next);
       },
-      setStatus: (showId, status) => commit({ ...state, [showId]: status }),
+      setStatus: (showId, status) =>
+        // Spreads the existing entry so moving a hand-typed show between
+        // sections doesn't drop the name the user typed.
+        commit({ ...state, [showId]: { ...state[showId], status } }),
+      addCustom: (entry, status) => {
+        const id = createCustomId();
+        commit({ ...state, [id]: { status, custom: entry } });
+        return id;
+      },
       remove: (showId) => {
         const next = { ...state };
         delete next[showId];

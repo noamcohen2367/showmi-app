@@ -111,7 +111,7 @@ function blendStop(
 export type AnimatedGradientBackgroundProps = ViewProps;
 
 /**
- * A full-bleed, ambiently-animated purple gradient meant to sit once behind
+ * A full-bleed, ambiently-animated accent gradient meant to sit once behind
  * the entire app (see the root layout snippet in the project write-up) —
  * never per-screen. Screens render on top of it with transparent
  * backgrounds, so it must be mounted above the router outlet, not inside it,
@@ -245,6 +245,19 @@ export function AnimatedGradientBackground({
         style={StyleSheet.absoluteFill}
         colors={colors}
         locations={[0, frozen(MID_LOCATION_RANGE), 1]}
+        // Bottom-to-top. `expo-linear-gradient` defaults to top-to-bottom,
+        // which put the accent's strongest stop across the top of every
+        // screen — directly behind each screen's header and the Home feed's
+        // filter bar, which is exactly where content is densest. Running it
+        // upwards instead anchors the color at the bottom edge, where the
+        // tab bar sits and there is nothing to tint.
+        //
+        // Flipping the axis rather than reversing `colors` keeps stop 0 the
+        // accent and stop 1 the background, so `locations` and every alpha
+        // constant in `gradient-palette.ts` keep meaning what their names
+        // say — including the contrast math, which is derived per stop.
+        start={{ x: 0.5, y: 1 }}
+        end={{ x: 0.5, y: 0 }}
       />
     </View>
   );

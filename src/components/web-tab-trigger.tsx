@@ -36,7 +36,7 @@ export function WebTabTrigger({ tab, variant, isFocused, ...pressableProps }: We
   // with the one Android renders via `NativeTabs.Trigger.VectorIcon`.
   const Icon = tab.vectorIcon.family;
   const iconName = isFocused ? tab.vectorIcon.selected : tab.vectorIcon.default;
-  // Purple brand tint for the active tab, matching the native tab bars.
+  // Brand accent tint for the active tab, matching the native tab bars.
   const tintColor = isFocused ? theme.primary : theme.textSecondary;
 
   return (

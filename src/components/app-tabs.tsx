@@ -23,7 +23,7 @@ export default function AppTabs() {
 
   return (
     <NativeTabs
-      // Purple brand tint for the selected icon + label, on both platforms.
+      // Brand accent tint for the selected icon + label, on both platforms.
       tintColor={colors.primary}
       // iOS: leave `backgroundColor` unset so the system tab bar keeps its
       // native translucent material — on iOS 26+ that's the automatic
@@ -36,7 +36,7 @@ export default function AppTabs() {
       // iOS-only: which system blur material to use for the (non-Liquid-Glass)
       // translucent tab bar background.
       blurEffect="systemChromeMaterial"
-      // Android-only: soft purple "pill" behind the selected tab's icon.
+      // Android-only: soft accent "pill" behind the selected tab's icon.
       indicatorColor={colors.primarySoft}>
       {TAB_ROUTES.map((tab) => (
         <NativeTabs.Trigger key={tab.name} name={tab.name}>

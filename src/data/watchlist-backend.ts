@@ -25,8 +25,48 @@
 /** Whether a saved show is one the user still wants to see, or has seen. */
 export type WatchStatus = 'want' | 'seen';
 
-/** `showId` → status. A show absent from this map isn't on the list at all. */
-export type WatchlistState = Readonly<Record<string, WatchStatus>>;
+/**
+ * A show the user typed in by hand, because it isn't in the catalogue — a
+ * production seen abroad, at a private theatre, or anything the app doesn't
+ * aggregate.
+ *
+ * Deliberately *not* a partial `Show`. A `Show` promises a venue, a synopsis,
+ * a cast, posters and bookable showtimes, and every screen that renders one
+ * relies on those being there. A hand-typed memory has a name and, at most, a
+ * note about where it was — so it gets its own small shape rather than a
+ * `Show` with most of its fields faked or left empty.
+ */
+export type CustomEntry = {
+  /** Free text, as typed. */
+  name: string;
+  /** Optional "where" — a theatre, a city, a country. */
+  note?: string;
+};
+
+export type WatchlistEntry = {
+  status: WatchStatus;
+  /** Present only on hand-typed entries; absent means a catalogue show. */
+  custom?: CustomEntry;
+};
+
+/**
+ * Entry id → entry. For a catalogue show the id *is* the `Show.id`; for a
+ * hand-typed one it's locally generated and prefixed (see `CUSTOM_ID_PREFIX`)
+ * so the two can never collide in this one map.
+ */
+export type WatchlistState = Readonly<Record<string, WatchlistEntry>>;
+
+/**
+ * Marks ids this app minted rather than ids that came from the catalogue.
+ * Keeping both in one map is what lets the watchlist screen render a single
+ * ordered list instead of stitching two sources together at every read.
+ */
+export const CUSTOM_ID_PREFIX = 'custom:';
+
+/** A collision-resistant id for a hand-typed entry. */
+export function createCustomId(): string {
+  return `${CUSTOM_ID_PREFIX}${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 export type WatchlistBackend = {
   /** Full current state. Async so a network-backed impl can drop straight in. */

@@ -1,6 +1,8 @@
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { SaveButton } from './save-button';
 import { ThemedText } from './themed-text';
 
 import { Spacing } from '@/constants/theme';
@@ -18,10 +20,15 @@ type ShowListItemProps = {
  * applies — see `ShowCard`'s doc comment.
  */
 export function ShowListItem({ show }: ShowListItemProps) {
+  const router = useRouter();
   const next = nextUpcomingShowtime(show.showtimes);
 
   return (
-    <Pressable style={({ pressed }) => [styles.container, pressed && styles.pressed]} accessibilityRole="button">
+    <Pressable
+      onPress={() => router.push({ pathname: '/show/[id]', params: { id: show.id } })}
+      style={({ pressed }) => [styles.container, pressed && styles.pressed]}
+      accessibilityRole="button"
+      accessibilityLabel={show.name}>
       <Image
         source={{ uri: show.images[0] }}
         style={styles.image}
@@ -46,6 +53,11 @@ export function ShowListItem({ show }: ShowListItemProps) {
           </ThemedText>
         )}
       </View>
+
+      {/* Its own Pressable inside the row's Pressable: tapping the bookmark
+          saves without also opening the show. Nesting works because the
+          inner one handles the touch and doesn't propagate it. */}
+      <SaveButton showId={show.id} showName={show.name} />
     </Pressable>
   );
 }
