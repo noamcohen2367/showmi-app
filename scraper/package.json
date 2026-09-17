@@ -1,0 +1,28 @@
+{
+  "name": "showmi-scraper",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "scrape": "tsx src/index.ts",
+    "scrape:dry": "tsx src/index.ts --dry-run",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "scrape:local": "node --env-file=.env --import tsx src/index.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
+    "cheerio": "^1.2.0",
+    "domhandler": "^6.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.3",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1"
+  },
+  "version": "1.0.0",
+  "description": "Scrapes Israeli theater schedules into Supabase for the showmi app"
+}
