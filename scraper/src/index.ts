@@ -17,6 +17,7 @@ import { cameriAdapter } from './adapters/cameri.js';
 import { habimaAdapter } from './adapters/habima.js';
 import { lessinAdapter } from './adapters/lessin.js';
 import { activeShowCount, createDb, syncTheater } from './db.js';
+import { ensurePosterBucket, rehostAll } from './lib/images.js';
 import { sanityProblems } from './lib/sanity.js';
 import type { Adapter } from './types.js';
 
@@ -37,6 +38,10 @@ if (selected.length === 0) {
 }
 
 const db = values['dry-run'] ? null : createDb();
+// Once per run, before any theater is scraped, so the first upload of a
+// fresh project doesn't fail on a missing bucket.
+if (db) await ensurePosterBucket(db);
+
 let failed = false;
 
 for (const adapter of selected) {
@@ -64,6 +69,12 @@ for (const adapter of selected) {
       failed = true;
       continue;
     }
+
+    // After the sanity gate, so a run that is about to be rejected never
+    // downloads a single image. Images already in the bucket are skipped, so
+    // on a normal run this does almost no network work.
+    const rehosted = await rehostAll(db, id, shows);
+    console.log(`[${id}] images: ${rehosted.copied} copied, ${rehosted.reused} already stored, ${rehosted.lost} unavailable`);
 
     const written = await syncTheater(db, id, shows);
     console.log(`[${id}] synced ${written.shows} shows, ${written.showtimes} showtimes`);

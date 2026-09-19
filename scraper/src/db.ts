@@ -48,6 +48,10 @@ export async function syncTheater(db: SupabaseClient, theaterId: TheaterId, show
     name: show.name,
     synopsis: show.synopsis,
     images: show.images,
+    // Written by `lib/images.ts` during re-hosting. Left null when the run
+    // could not decode the poster, in which case the app falls back to
+    // deriving the tint on device.
+    dominant_color: show.dominantColor ?? null,
     genre_label: show.genreLabel ?? null,
     categories: show.categories,
     performers: show.performers,

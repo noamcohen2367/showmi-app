@@ -1,6 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
@@ -19,6 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SaveButton } from '@/components/save-button';
+import { ShowPoster } from '@/components/show-poster';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { withAlpha } from '@/constants/gradient-palette';
@@ -126,14 +126,9 @@ function ShowDetail({ show }: { show: Show }) {
 
         <View style={styles.body}>
           <View style={styles.infoRow}>
-            <Image
-              source={{ uri: show.images[0] }}
-              style={styles.thumbnail}
-              contentFit="cover"
-              transition={150}
-              cachePolicy="memory-disk"
-              recyclingKey={show.id}
-            />
+            {/* The title sits immediately beside it, so the fallback stays
+                blank rather than printing the name twice. */}
+            <ShowPoster show={show} style={styles.thumbnail} showFallbackLabel={false} />
             <View style={styles.infoText}>
               <ThemedText type="title" style={styles.name} numberOfLines={2}>
                 {show.name}
@@ -294,14 +289,14 @@ function Hero({ show, onBack }: { show: Show; onBack: () => void }) {
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={handleScroll}
         getItemLayout={(_, i) => ({ length: heroWidth, offset: heroWidth * i, index: i })}
-        renderItem={({ item }) => (
-          <Image
-            source={{ uri: item }}
+        // Indexed rather than passed the uri: `ShowPoster` takes the show and
+        // picks the image itself, so the fallback has the show's name to
+        // render when a page's URL fails.
+        renderItem={({ index }) => (
+          <ShowPoster
+            show={show}
+            index={index}
             style={{ width: heroWidth, height: heroHeight }}
-            contentFit="cover"
-            transition={150}
-            cachePolicy="memory-disk"
-            recyclingKey={item}
           />
         )}
       />
@@ -374,13 +369,13 @@ function PosterBackground({ show }: { show: Show }) {
     <View style={[styles.posterBackground, { height }]} pointerEvents="none">
       <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.background }]} />
 
-      <Image
-        source={{ uri: show.images[0] }}
+      <ShowPoster
+        show={show}
         style={StyleSheet.absoluteFill}
-        contentFit="cover"
-        transition={150}
-        cachePolicy="memory-disk"
-        recyclingKey={show.id}
+        // No label: this is a background, and `ShowPoster`'s fallback tile
+        // resolves to `theme.backgroundElement` here — a flat neutral panel
+        // rather than the black the raw `<Image>` used to leave behind.
+        showFallbackLabel={false}
         // Heavy on purpose. The posters are ~300x450 stretched to fill a
         // phone screen, so they arrive soft already; this pushes them the
         // rest of the way to a pure colour field, which is the point — the

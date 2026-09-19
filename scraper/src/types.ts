@@ -35,8 +35,20 @@ export type ScrapedShow = {
   sourceUrl: string;
   name: string;
   synopsis: string;
-  /** Portrait poster first when the site has one, then production photos. */
+  /**
+   * Portrait poster first when the site has one, then production photos.
+   *
+   * Adapters put the theater's own URLs here. On a real run `lib/images.ts`
+   * replaces them with our Supabase Storage URLs before the rows are written
+   * — see that file for why the originals can't be linked to directly.
+   */
   images: string[];
+  /**
+   * `#RRGGBB` average of the poster, filled in during re-hosting rather than
+   * by an adapter. Absent on a dry run, and whenever the image couldn't be
+   * decoded.
+   */
+  dominantColor?: string;
   genreLabel?: string;
   categories: string[];
   performers: ScrapedPerson[];

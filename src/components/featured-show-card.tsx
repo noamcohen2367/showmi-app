@@ -1,10 +1,10 @@
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { SaveButton } from './save-button';
 import { SHOW_CARD_WIDTH } from './show-card';
+import { ShowPoster } from './show-poster';
 import { ThemedText } from './themed-text';
 
 import { withAlpha } from '@/constants/gradient-palette';
@@ -124,15 +124,9 @@ export function FeaturedShowCard({ show }: FeaturedShowCardProps) {
         .join(', ')}
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
     >
-      <Image
-        source={{ uri: show.images[0] }}
-        style={styles.image}
-        contentFit="cover"
-        transition={150}
-        // Same reasoning as `ShowCard`: expo-image defaults to disk-only.
-        cachePolicy="memory-disk"
-        recyclingKey={show.id}
-      />
+      {/* No fallback label: this card already overlays the name, and the
+          scrim above would sit on top of a second copy of it. */}
+      <ShowPoster show={show} style={styles.image} showFallbackLabel={false} />
 
       <LinearGradient
         style={styles.scrim}

@@ -1,8 +1,8 @@
-import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { SaveButton } from './save-button';
+import { ShowPoster } from './show-poster';
 import { ThemedText } from './themed-text';
 
 import { Spacing } from '@/constants/theme';
@@ -29,17 +29,9 @@ export function ShowListItem({ show }: ShowListItemProps) {
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
       accessibilityRole="button"
       accessibilityLabel={show.name}>
-      <Image
-        source={{ uri: show.images[0] }}
-        style={styles.image}
-        contentFit="cover"
-        transition={150}
-        // See `ShowCard` for why the default `cachePolicy="disk"` isn't
-        // enough here, and why a recycled cell needs `recyclingKey`.
-        cachePolicy="memory-disk"
-        recyclingKey={show.id}
-        accessibilityLabel={show.name}
-      />
+      {/* The row prints the name immediately to its side, so the fallback
+          doesn't repeat it — see `ShowPoster`. */}
+      <ShowPoster show={show} style={styles.image} showFallbackLabel={false} />
       <View style={styles.text}>
         <ThemedText type="smallBold" numberOfLines={1}>
           {show.name}

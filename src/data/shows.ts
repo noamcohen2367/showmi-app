@@ -146,13 +146,19 @@ async function fetchCatalog(): Promise<CatalogEntry[]> {
 }
 
 /**
- * One row → the app's `Show`. Returns null for a row no screen could render:
- * every card and the detail hero read `images[0]`, and `Show` promises a
- * theater, so a show missing either is left out rather than half-drawn.
+ * One row → the app's `Show`. Returns null only for a row no screen could
+ * render at all — which now means just a missing theater, since `Show`
+ * promises a venue and every card prints it.
+ *
+ * A missing *image* used to disqualify a row here too. It no longer does: a
+ * show with a name, a venue, a synopsis and dates is worth showing, and
+ * dropping it made it vanish from the catalogue with no error anywhere — the
+ * detail screen even reported it as "not found". `ShowPoster` renders a
+ * placeholder for the empty case instead.
  */
 export function rowToShow(row: ShowRow): Show | null {
   const images = (row.images ?? []).filter(Boolean);
-  if (!row.theater || images.length === 0) return null;
+  if (!row.theater) return null;
 
   // The scraper keeps one person per (name, role), so someone listed twice —
   // a double role, or both a card and a text line — would repeat here.

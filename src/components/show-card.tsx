@@ -1,7 +1,7 @@
-import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { ShowPoster } from './show-poster';
 import { ThemedText } from './themed-text';
 
 import { Spacing } from '@/constants/theme';
@@ -33,23 +33,10 @@ export function ShowCard({ show }: ShowCardProps) {
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
       accessibilityRole="button"
       accessibilityLabel={show.name}>
-      <Image
-        source={{ uri: show.images[0] }}
-        style={styles.image}
-        contentFit="cover"
-        transition={150}
-        // expo-image defaults to `cachePolicy="disk"`, not `"memory-disk"`
-        // (see its `Image.types.d.ts` — `@default 'disk'`). With only a disk
-        // cache, a card that scrolls out of the window and back in re-reads
-        // the file and re-decodes the bitmap every time, on the scroll path.
-        // These posters are small and few, so keeping the decoded bitmap in
-        // memory too is cheap and removes that repeat work entirely.
-        cachePolicy="memory-disk"
-        // FlatList recycles cell views; without this, a recycled view shows
-        // the *previous* show's poster until the new one finishes decoding.
-        recyclingKey={show.id}
-        accessibilityLabel={show.name}
-      />
+      {/* `ShowPoster`, not a bare `<Image>`: it owns the caching props and
+          the placeholder a failed or missing URL falls back to. The card's
+          name is right below, so the fallback doesn't repeat it. */}
+      <ShowPoster show={show} style={styles.image} showFallbackLabel={false} />
       <View style={styles.text}>
         <ThemedText type="smallBold" numberOfLines={1}>
           {show.name}

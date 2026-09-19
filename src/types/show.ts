@@ -40,7 +40,14 @@ export type Show = {
   theater: Theater;
   synopsis: string;
   actors: Actor[];
-  /** Poster/production photos, at least one. First image is the "hero" one. */
+  /**
+   * Poster/production photos, first being the "hero" one.
+   *
+   * May be empty. It used to be guaranteed non-empty, enforced by dropping
+   * imageless rows during mapping — which quietly removed real shows from the
+   * catalogue entirely. Render these through `ShowPoster`, which falls back to
+   * a placeholder for both an empty list and a URL that fails to load.
+   */
   images: string[];
   /**
    * Dominant color of `images[0]`, as `#RRGGBB` — used to tint the featured
