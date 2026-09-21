@@ -20,7 +20,7 @@
 
 import * as cheerio from 'cheerio';
 
-import { categoriesFor } from '../lib/categories.js';
+import { categoriesFor, looksLikeCredits, splitDeclaredGenre } from '../lib/categories.js';
 import { fromDayMonthYear, israelNowIso, parseDayMonthTime } from '../lib/dates.js';
 import { fetchText } from '../lib/http.js';
 import {
@@ -106,6 +106,8 @@ export function parseLessinShowPage(html: string, sourceUrl: string): LessinShow
     .get()
     .find(Boolean);
 
+  const isCredits = looksLikeCredits(tagline ?? '');
+
   // The about block is rendered twice (desktop + ".movile"); read the desktop one.
   const about = $('.show_expert').not('.movile').first();
   const paragraphs = about
@@ -160,8 +162,21 @@ export function parseLessinShowPage(html: string, sourceUrl: string): LessinShow
     name,
     synopsis,
     images: [...new Set(images)],
-    genreLabel: tagline,
-    categories: categoriesFor(tagline, paragraphs[0], name),
+    // The slot under the h1 holds a genre line on some shows and nothing but
+    // "מאת / תרגום / בימוי" on most. Only the former is a genre label; the
+    // latter would otherwise sit in the database's genre column pretending
+    // to be one. Lessin publishes no genre anywhere else on the page.
+    genreLabel: isCredits ? undefined : tagline || undefined,
+    // Lessin opens its synopsis with the genre — "דרמה חברתית.", "דרמה
+    // קומית. עיבוד לסרט מצליח." — so that first paragraph is a declaration
+    // and counts as a label; the plot after it is prose. A credits tagline
+    // contributes nothing but noise and is left out entirely.
+    categories: categoriesFor({
+      label: [isCredits ? '' : tagline, name, splitDeclaredGenre(synopsis).label]
+        .filter(Boolean)
+        .join(' '),
+      prose: splitDeclaredGenre(synopsis).prose,
+    }),
     performers: uniqueBy(performers, (p) => p.name),
     credits: uniqueBy(credits, (p) => `${p.name}|${p.role}`),
     rows: uniqueBy(rows, (r) => r.orderId),

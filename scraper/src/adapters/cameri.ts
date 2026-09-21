@@ -128,7 +128,12 @@ export function parseCalendar(html: string, now: Date = new Date()): ScrapedShow
           .map((src) => absoluteUrl(fullSizeImage(src), ORIGIN)!)
           .filter((src, i, all) => all.indexOf(src) === i),
         genreLabel: firstLine || undefined,
-        categories: categoriesFor(firstLine, p.category_name),
+        // `category_name` is Cameri's own taxonomy value, so it counts as a
+        // label alongside the headline. The synopsis goes in as prose.
+        categories: categoriesFor({
+          label: [firstLine, p.category_name].filter(Boolean).join(' '),
+          prose: summary,
+        }),
         performers: (p.actors ?? [])
           .map((id) => actorNames.get(id))
           .filter((name): name is string => Boolean(name))
@@ -215,9 +220,20 @@ export function parseCameriShowPage(html: string): CameriShowDetails {
 
 /** Page data wins where it's richer; the JSON stays as the fallback. */
 export function mergeCameriDetails(show: ScrapedShow, details: CameriShowDetails): ScrapedShow {
+  const synopsis = details.synopsis || show.synopsis;
+
   return {
     ...show,
-    synopsis: details.synopsis || show.synopsis,
+    synopsis,
+    // Recomputed, not carried over. The categories built in `parseCameriCalendar`
+    // only had the calendar's one-line `summary` to go on; the full synopsis
+    // arrives here, and it is what mentions "מחזמר" or "קומדיה" for a good
+    // number of shows. Leaving the calendar's answer in place left 15 shows
+    // uncategorised that the page itself categorises perfectly well.
+    categories: categoriesFor({
+      label: [show.genreLabel, show.name].filter(Boolean).join(' '),
+      prose: synopsis,
+    }),
     credits: details.credits.length ? details.credits : show.credits,
     performers: details.performers.length ? details.performers : show.performers,
     images: [...new Set([...show.images, ...details.gallery])],

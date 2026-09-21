@@ -200,7 +200,9 @@ export function parseShowPage(html: string, sourceUrl: string, now: Date = new D
     synopsis,
     images: [...new Set(images)],
     genreLabel,
-    categories: categoriesFor(genreLabel, name),
+    // Habima's label is genuinely a genre line ("דרמה ישראלית"), so it and
+    // the title are taken at face value; the synopsis goes in as prose.
+    categories: categoriesFor({ label: [genreLabel, name].filter(Boolean).join(' '), prose: synopsis }),
     performers,
     credits,
     showtimes: uniqueBy(showtimes, (s) => s.id).sort((a, b) => a.startsAt.localeCompare(b.startsAt)),

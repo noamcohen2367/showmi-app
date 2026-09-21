@@ -85,3 +85,24 @@ describe('buildLessinShows', () => {
     warn.mockRestore();
   });
 });
+
+describe('parseLessinShowPage, when the line under the title is only credits', () => {
+  // The live page for this show — like 19 of Lessin's 23 — puts nothing but
+  // "מאת / תרגום / בימוי" where the other fixture happens to name a genre.
+  const page = parseLessinShowPage(
+    fixture('lessin-show-credits-tagline.html'),
+    'https://www.lessin.co.il/shows/ציפורים-כולם-אירוע-מיוחד-ל-50-הצגות/',
+  );
+
+  it('does not store a credits line as the genre label', () => {
+    // Storing it put "מאת: ווג'די מועוואד תרגום: ..." in the database's genre
+    // column, where it can only ever mislead: no keyword rule will match it,
+    // and anything reading the column sees a genre that isn't one.
+    expect(page.genreLabel).toBeUndefined();
+  });
+
+  it('still reads the name and synopsis', () => {
+    expect(page.name).toBe('ציפורים כולם – אירוע מיוחד ל 50 הצגות !');
+    expect(page.synopsis).toContain('סאגה משפחתית');
+  });
+});
