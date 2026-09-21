@@ -2,7 +2,6 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -19,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SaveButton } from '@/components/save-button';
 import { ShowPoster } from '@/components/show-poster';
+import { ShowtimePickerSheet } from '@/components/showtime-picker-sheet';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { withAlpha } from '@/constants/gradient-palette';
@@ -111,6 +111,7 @@ function ShowDetail({ show }: { show: Show }) {
   const theme = useTheme();
   const router = useRouter();
   const next = nextUpcomingShowtime(show.showtimes);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   return (
     <ThemedView style={styles.container}>
@@ -235,18 +236,19 @@ function ShowDetail({ show }: { show: Show }) {
           </View>
 
           <Pressable
-            disabled={!next}
+            disabled={show.showtimes.length === 0}
             accessibilityRole="button"
-            accessibilityLabel="הזמנת כרטיסים באתר המכירה"
-            // Opens the ticketing site in an in-app browser rather than
-            // leaving the app entirely — `purchaseUrl` is per-showtime, so
-            // this is the link for the exact date shown beside it.
-            onPress={() => next && WebBrowser.openBrowserAsync(next.purchaseUrl)}
+            accessibilityLabel="בחירת מועד ורכישת כרטיסים"
+            // Opens the picker rather than jumping straight to a link. The
+            // bar beside it names the *soonest* date, but that is a preview,
+            // not the choice — `purchaseUrl` is per showtime, and a show with
+            // dozens of dates shouldn't have one picked for it silently.
+            onPress={() => setPickerOpen(true)}
             style={({ pressed }) => [
               styles.cta,
               { backgroundColor: theme.primary },
               pressed && styles.pressed,
-              !next && styles.ctaDisabled,
+              show.showtimes.length === 0 && styles.ctaDisabled,
             ]}>
             <ThemedText type="smallBold" style={{ color: theme.background }}>
               הזמנת כרטיסים
@@ -254,6 +256,8 @@ function ShowDetail({ show }: { show: Show }) {
           </Pressable>
         </SafeAreaView>
       </GlassView>
+
+      <ShowtimePickerSheet visible={pickerOpen} onClose={() => setPickerOpen(false)} show={show} />
     </ThemedView>
   );
 }

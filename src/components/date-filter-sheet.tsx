@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { BottomSheet, SheetButton } from './bottom-sheet';
+import { MonthCalendar } from './month-calendar';
 import { ThemedText } from './themed-text';
 
 import { Spacing } from '@/constants/theme';
@@ -11,7 +12,6 @@ import {
   NO_DATE_FILTER,
   orderRange,
   todayKey,
-  toDayKey,
   weekendRange,
   type DateFilter,
   type DayKey,
@@ -19,14 +19,6 @@ import {
 
 /** How many months forward the grid offers. */
 const MONTHS_SHOWN = 6;
-
-/** Sunday-first, matching both the reference's grid and the Hebrew week. */
-const WEEKDAY_LABELS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
-
-const MONTH_NAMES = [
-  'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
-  'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר',
-];
 
 type DateFilterSheetProps = {
   visible: boolean;
@@ -58,8 +50,6 @@ export function DateFilterSheet({ visible, onClose, value, onApply }: DateFilter
     setLastVisible(visible);
     if (visible) setDraft(value);
   }
-
-  const months = useMemo(() => buildMonths(MONTHS_SHOWN), []);
 
   function handleDayPress(day: DayKey) {
     setDraft((current) => {
@@ -100,19 +90,15 @@ export function DateFilterSheet({ visible, onClose, value, onApply }: DateFilter
         <PresetChip label="סופ״ש" onPress={() => setDraft({ kind: 'range', ...weekendRange() })} active={isWeekend(draft)} />
       </View>
 
-      <View style={styles.weekdayRow}>
-        {WEEKDAY_LABELS.map((label) => (
-          <ThemedText key={label} type="small" themeColor="textSecondary" style={styles.weekdayLabel}>
-            {label}
-          </ThemedText>
-        ))}
-      </View>
-
-      <ScrollView style={styles.grid} showsVerticalScrollIndicator={false}>
-        {months.map((month) => (
-          <MonthGrid key={month.key} month={month} draft={draft} onDayPress={handleDayPress} />
-        ))}
-      </ScrollView>
+      {/* The same grid the purchase sheet uses. Every day is selectable
+          here — this filters a feed rather than picking a performance, so
+          a date with nothing on it is a legitimate (if empty) choice. */}
+      <MonthCalendar
+        months={MONTHS_SHOWN}
+        isSelectable={() => true}
+        isSelected={(day) => isSelected(day, draft)}
+        onDayPress={handleDayPress}
+      />
 
       {draft.kind !== 'none' ? (
         <Pressable onPress={() => setDraft(NO_DATE_FILTER)} accessibilityRole="button">
@@ -122,78 +108,6 @@ export function DateFilterSheet({ visible, onClose, value, onApply }: DateFilter
         </Pressable>
       ) : null}
     </BottomSheet>
-  );
-}
-
-type Month = { key: string; year: number; month: number; leadingBlanks: number; days: DayKey[] };
-
-function buildMonths(count: number): Month[] {
-  const now = new Date();
-  return Array.from({ length: count }, (_, offset) => {
-    const first = new Date(now.getFullYear(), now.getMonth() + offset, 1);
-    const year = first.getFullYear();
-    const month = first.getMonth();
-    // Day 0 of the *next* month is the last day of this one.
-    const dayCount = new Date(year, month + 1, 0).getDate();
-    return {
-      key: `${year}-${month}`,
-      year,
-      month,
-      leadingBlanks: first.getDay(),
-      days: Array.from({ length: dayCount }, (_, i) => toDayKey(new Date(year, month, i + 1))),
-    };
-  });
-}
-
-function MonthGrid({
-  month,
-  draft,
-  onDayPress,
-}: {
-  month: Month;
-  draft: DateFilter;
-  onDayPress: (day: DayKey) => void;
-}) {
-  const theme = useTheme();
-  const today = todayKey();
-
-  return (
-    <View style={styles.month}>
-      <ThemedText type="smallBold" style={styles.monthTitle}>
-        {MONTH_NAMES[month.month]} {month.year}
-      </ThemedText>
-
-      <View style={styles.monthDays}>
-        {Array.from({ length: month.leadingBlanks }, (_, i) => (
-          <View key={`blank-${i}`} style={styles.day} />
-        ))}
-
-        {month.days.map((day) => {
-          const selected = isSelected(day, draft);
-          const past = day < today;
-          return (
-            <Pressable
-              key={day}
-              disabled={past}
-              onPress={() => onDayPress(day)}
-              accessibilityRole="button"
-              accessibilityState={{ selected, disabled: past }}
-              style={({ pressed }) => [
-                styles.day,
-                selected && { backgroundColor: theme.primarySoft, borderColor: theme.primary },
-                pressed && !past && styles.dayPressed,
-              ]}>
-              <ThemedText
-                type={selected ? 'smallBold' : 'small'}
-                themeColor={past ? 'textSecondary' : selected ? 'primary' : 'text'}
-                style={[styles.dayLabel, past && styles.dayPast]}>
-                {Number(day.split('-')[2])}
-              </ThemedText>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
   );
 }
 
@@ -208,7 +122,7 @@ function PresetChip({ label, onPress, active }: { label: string; onPress: () => 
         styles.preset,
         { backgroundColor: active ? theme.primarySoft : theme.backgroundElement },
         active && { borderColor: theme.primary },
-        pressed && styles.dayPressed,
+        pressed && styles.pressed,
       ]}>
       <ThemedText type="smallBold" themeColor={active ? 'primary' : 'text'}>
         {label}
@@ -231,9 +145,6 @@ function isWeekend(f: DateFilter) {
   return f.from === weekend.from && f.to === weekend.to;
 }
 
-/** Seven columns; the grid is symmetric, so it needs no RTL mirroring of its own. */
-const DAY_SIZE = `${100 / 7}%` as const;
-
 const styles = StyleSheet.create({
   presets: {
     flexDirection: 'row',
@@ -247,46 +158,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'transparent',
   },
-  weekdayRow: {
-    // A plain row: under `forceRTL` this already runs right-to-left, which
-    // puts א (Sunday) on the right — where a Hebrew calendar starts. The day
-    // cells below use the same direction, so columns stay aligned with it.
-    flexDirection: 'row',
-  },
-  weekdayLabel: {
-    width: DAY_SIZE,
-    textAlign: 'center',
-  },
-  grid: {
-    maxHeight: 340,
-  },
-  month: {
-    marginBottom: Spacing.three,
-  },
-  monthTitle: {
-    marginBottom: Spacing.two,
-  },
-  monthDays: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  day: {
-    width: DAY_SIZE,
-    aspectRatio: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: Spacing.two,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  dayPressed: {
+  // The grid's own styles moved to `month-calendar.tsx` along with it; what
+  // is left here is only the preset row and the clear link.
+  pressed: {
     opacity: 0.6,
-  },
-  dayLabel: {
-    textAlign: 'center',
-  },
-  dayPast: {
-    opacity: 0.35,
   },
   clear: {
     textAlign: 'center',
