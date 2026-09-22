@@ -53,6 +53,8 @@ export default function DiscoverScreen() {
   // location filter at all, and its shows span several cities — so naming
   // one of them would imply a scope that doesn't exist. If the data ever
   // does narrow to a single city, the pill says so on its own.
+  const isFiltering = dateFilter.kind !== 'none' || categoryFilter.length > 0;
+
   const locationLabel = useMemo(() => {
     if (result.status !== 'ready') return '';
     const cities = new Set(result.feed.all.map((show) => show.theater.city));
@@ -126,10 +128,20 @@ export default function DiscoverScreen() {
         )}
         ItemSeparatorComponent={() => <View style={styles.listSeparator} />}
         contentContainerStyle={styles.listContent}
-        ListHeaderComponent={<FeedHeader feed={feed} />}
+        // Filtering swaps the whole screen from browsing to results. The
+        // carousels are curated subsets that ignore the filter entirely, so
+        // leaving them up made most of the screen sit unchanged while the
+        // user watched — which reads as the filter not working at all.
+        ListHeaderComponent={
+          isFiltering ? (
+            <ResultsHeader count={filteredShows.length} />
+          ) : (
+            <FeedHeader feed={feed} />
+          )
+        }
         ListEmptyComponent={
           <ThemedText themeColor="textSecondary" style={styles.emptyFilterText}>
-            אין הצגות בקטגוריה הזו כרגע.
+            {emptyMessage(dateFilter, categoryFilter)}
           </ThemedText>
         }
       />
@@ -146,6 +158,39 @@ export default function DiscoverScreen() {
  * category tap was rebuilding the carousel and all 3 horizontal lists even
  * though none of them depend on the selected category.
  */
+/**
+ * What sits above the list while a filter is active.
+ *
+ * Deliberately not "כל ההצגות" — that heading is a claim, and it stops being
+ * true the moment anything is filtered. The count is the useful part: it
+ * tells the user their tap did something even when the answer is small.
+ */
+function ResultsHeader({ count }: { count: number }) {
+  return (
+    <View style={styles.resultsHeader}>
+      <ThemedText type="subtitle" style={styles.allShowsTitle}>
+        {count === 1 ? 'הצגה אחת' : `${count} הצגות`}
+      </ThemedText>
+    </View>
+  );
+}
+
+/**
+ * The message for an empty result, named after what the user actually did.
+ *
+ * The old copy always blamed the category, including when no category was
+ * selected and the date alone had emptied the list.
+ */
+function emptyMessage(dateFilter: DateFilter, categoryFilter: string[]): string {
+  const byDate = dateFilter.kind !== 'none';
+  const byCategory = categoryFilter.length > 0;
+
+  if (byDate && byCategory) return 'אין הצגות בקטגוריות האלה בתאריכים שבחרת.';
+  if (byDate) return 'אין הצגות בתאריכים שבחרת.';
+  if (byCategory) return 'אין הצגות בקטגוריות האלה כרגע.';
+  return 'אין הצגות להצגה כרגע.';
+}
+
 function FeedHeader({ feed }: { feed: HomeFeed }) {
   return (
     <View style={styles.header}>
@@ -205,6 +250,9 @@ const styles = StyleSheet.create({
   },
   header: {
     gap: Spacing.five,
+    paddingBottom: Spacing.two,
+  },
+  resultsHeader: {
     paddingBottom: Spacing.two,
   },
   allShowsTitle: {
