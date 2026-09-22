@@ -1,14 +1,17 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import SimpleLineIcons from '@expo/vector-icons/SimpleLineIcons';
+import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { type ReactNode } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { Alert, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ExternalLink } from '@/components/external-link';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { supabase } from '@/data/supabase';
 import { BottomTabInset, Spacing } from '@/constants/theme';
+import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 
 type ProfileRow = {
@@ -18,12 +21,14 @@ type ProfileRow = {
   // everywhere else in the nav/UI) has no mustache icon.
   renderIcon: (color: string) => ReactNode;
   label: string;
+  /** Trailing text, e.g. the signed-in address on the account row. */
+  detail?: string;
+  onPress?: () => void;
 };
 
 // Plain account/app-settings rows. No purchase, payment, or order-history
 // items here — this app never sells tickets, so there's nothing to manage.
-const ROWS: ProfileRow[] = [
-  { renderIcon: (color) => <SimpleLineIcons name="mustache" size={20} color={color} />, label: 'חשבון' },
+const SETTINGS_ROWS: ProfileRow[] = [
   { renderIcon: (color) => <Ionicons name="notifications-outline" size={20} color={color} />, label: 'התראות' },
   { renderIcon: (color) => <Ionicons name="color-palette-outline" size={20} color={color} />, label: 'מראה' },
   {
@@ -41,6 +46,31 @@ const ROWS: ProfileRow[] = [
  */
 export default function ProfileScreen() {
   const theme = useTheme();
+  const router = useRouter();
+  const { user, ready } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+
+  async function signOut() {
+    if (signingOut) return;
+    setSigningOut(true);
+    // No local state to clear afterwards: `onAuthStateChange` in
+    // `AuthProvider` is what everything reads, and it fires on its own.
+    const { error } = await supabase.auth.signOut();
+    setSigningOut(false);
+    if (error) Alert.alert('לא הצלחנו להתנתק', 'בדוק את החיבור ונסה שוב.');
+  }
+
+  const accountRow: ProfileRow = {
+    renderIcon: (color) => <SimpleLineIcons name="mustache" size={20} color={color} />,
+    label: 'חשבון',
+    // `ready` is false only for the moment it takes to read the keychain.
+    // Showing "not signed in" during it would tell a returning user the
+    // wrong thing, so the row stays blank until the answer is known.
+    detail: ready ? (user?.email ?? 'התחברות') : undefined,
+    onPress: user ? undefined : () => router.push('/sign-in'),
+  };
+
+  const rows = [accountRow, ...SETTINGS_ROWS];
 
   return (
     <ThemedView style={styles.container}>
@@ -50,10 +80,11 @@ export default function ProfileScreen() {
         </ThemedText>
 
         <ThemedView style={styles.rowsGroup}>
-          {ROWS.map((row, index) => (
+          {rows.map((row, index) => (
             <Pressable
               key={row.label}
-              style={({ pressed }) => pressed && styles.pressed}
+              onPress={row.onPress}
+              style={({ pressed }) => pressed && row.onPress != null && styles.pressed}
               accessibilityRole="button"
             >
               <ThemedView
@@ -61,11 +92,16 @@ export default function ProfileScreen() {
                 style={[
                   styles.row,
                   index === 0 && styles.rowFirst,
-                  index === ROWS.length - 1 && styles.rowLast,
+                  index === rows.length - 1 && styles.rowLast,
                 ]}
               >
                 {row.renderIcon(theme.textSecondary)}
                 <ThemedText style={styles.rowLabel}>{row.label}</ThemedText>
+                {row.detail ? (
+                  <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                    {row.detail}
+                  </ThemedText>
+                ) : null}
                 {/* RTL: "forward" (deeper into the row) points left, not right. */}
                 <Ionicons
                   name="chevron-back"
@@ -76,6 +112,18 @@ export default function ProfileScreen() {
             </Pressable>
           ))}
         </ThemedView>
+
+        {user ? (
+          <Pressable
+            onPress={() => void signOut()}
+            disabled={signingOut}
+            accessibilityRole="button"
+            style={({ pressed }) => pressed && styles.pressed}>
+            <ThemedText type="smallBold" themeColor="primary">
+              {signingOut ? 'מתנתק…' : 'התנתקות'}
+            </ThemedText>
+          </Pressable>
+        ) : null}
 
         <ExternalLink href="https://docs.expo.dev" asChild>
           <Pressable style={({ pressed }) => pressed && styles.pressed}>

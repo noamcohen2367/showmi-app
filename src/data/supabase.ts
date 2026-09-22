@@ -39,7 +39,15 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
     autoRefreshToken: true,
     // Off: the app is not a browser. Nothing puts tokens in a URL fragment,
     // and leaving it on makes the client inspect `window.location` at
-    // startup, which does not exist on native.
+    // startup, which does not exist on native. The deep-link callback is
+    // handled explicitly instead — see `AuthProvider`.
     detectSessionInUrl: false,
+    // PKCE rather than the implicit default. Implicit sends the access and
+    // refresh tokens themselves back in the redirect URL, and a URL is not a
+    // private channel on a phone: it passes through the OS link handler and,
+    // if a browser is involved, its history. PKCE sends a single-use code
+    // that is worthless without the verifier this client keeps on the
+    // device, so an intercepted callback URL yields nothing.
+    flowType: 'pkce',
   },
 });

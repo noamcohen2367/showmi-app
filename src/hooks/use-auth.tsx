@@ -1,7 +1,9 @@
 import type { Session, User } from '@supabase/supabase-js';
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import * as Linking from 'expo-linking';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 
+import { authErrorMessage, parseAuthCallback } from '@/data/auth-redirect';
 import { supabase } from '@/data/supabase';
 
 type AuthContextValue = {
@@ -18,6 +20,14 @@ type AuthContextValue = {
    * loading the wrong (empty) list.
    */
   ready: boolean;
+  /**
+   * Hebrew text for a sign-in link that did not work — expired, or already
+   * used. Held here rather than on the sign-in screen because the link can
+   * arrive while that screen is not mounted, including on a cold start.
+   */
+  callbackError: string | null;
+  /** Called when the user acts on the error, e.g. asks for a fresh link. */
+  clearCallbackError: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -28,15 +38,20 @@ const AuthContext = createContext<AuthContextValue | null>(null);
  * Mounted above `WatchlistProvider` in the root layout, because the watchlist
  * needs to know whose rows to load before it loads anything.
  *
- * Signing in and out is not here on purpose: this provider only *observes*.
- * `onAuthStateChange` fires for every route into a session — a magic link
- * opened from mail, an OAuth redirect, a token refreshed in the background,
- * a sign-out on another device — so making it the single source of truth
- * means no caller has to remember to update state after an auth call.
+ * Requesting a sign-in link, and signing out, are not here on purpose:
+ * `onAuthStateChange` fires for every route into a session — a link opened
+ * from mail, a token refreshed in the background, a sign-out on another
+ * device — so making it the single source of truth means no caller has to
+ * remember to update state after an auth call.
+ *
+ * The one auth *action* that does live here is redeeming the deep-link
+ * callback, because it has no screen of its own: the link can arrive while
+ * the sign-in screen is long gone, or launch the app from cold.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
+  const [callbackError, setCallbackError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,9 +98,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    /**
+     * Trade the one-time code from the email link for a session.
+     *
+     * No `setSession` call is needed on success: `exchangeCodeForSession`
+     * drives `onAuthStateChange`, which the effect above is already
+     * listening to. Doing both would set the same state twice.
+     */
+    async function redeem(url: string) {
+      const callback = parseAuthCallback(url);
+      if (!callback) return;
+
+      if (callback.kind === 'error') {
+        if (!cancelled) setCallbackError(authErrorMessage(callback.code));
+        return;
+      }
+
+      const { error } = await supabase.auth.exchangeCodeForSession(callback.code);
+      if (cancelled) return;
+      // The commonest real failure is a link opened on a different device
+      // from the one that asked for it: the PKCE verifier lives on the
+      // device that sent the request, so there is nothing here to redeem
+      // the code against.
+      setCallbackError(error ? 'הקישור נפתח במכשיר אחר מזה שביקש אותו. בקש קישור חדש מהמכשיר הזה.' : null);
+    }
+
+    // A link that launched the app from cold is waiting here rather than
+    // arriving as an event, so both paths have to be covered.
+    Linking.getInitialURL().then((url) => {
+      if (url && !cancelled) void redeem(url);
+    });
+
+    const subscription = Linking.addEventListener('url', ({ url }) => void redeem(url));
+
+    return () => {
+      cancelled = true;
+      subscription.remove();
+    };
+  }, []);
+
+  const clearCallbackError = useCallback(() => setCallbackError(null), []);
+
   const value = useMemo<AuthContextValue>(
-    () => ({ session, user: session?.user ?? null, ready }),
-    [session, ready],
+    () => ({ session, user: session?.user ?? null, ready, callbackError, clearCallbackError }),
+    [session, ready, callbackError, clearCallbackError],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
