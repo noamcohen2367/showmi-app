@@ -1,4 +1,5 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useNavigation } from 'expo-router';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -14,6 +15,20 @@ import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useHomeFeed } from '@/hooks/use-home-feed';
 import { NO_DATE_FILTER, showMatchesDateFilter, type DateFilter } from '@/utils/date-filter';
 import type { HomeFeed } from '@/data/shows';
+import type { Show } from '@/types/show';
+
+/**
+ * The slice of the tab navigator this screen actually uses.
+ *
+ * Hand-written rather than imported: `expo-router/unstable-native-tabs`
+ * declares `tabPress` in `NativeTabNavigationEventMap` but doesn't export
+ * that type. Declaring the two members used here keeps the event name
+ * type-checked, which a cast on the string would not.
+ */
+type TabPressNavigation = {
+  isFocused(): boolean;
+  addListener(event: 'tabPress', callback: () => void): () => void;
+};
 
 /**
  * Tab 1 — Home/Discover (`app/(tabs)/index.tsx`).
@@ -54,6 +69,33 @@ export default function DiscoverScreen() {
   // one of them would imply a scope that doesn't exist. If the data ever
   // does narrow to a single city, the pill says so on its own.
   const isFiltering = dateFilter.kind !== 'none' || categoryFilter.length > 0;
+
+  const listRef = useRef<FlatList<Show>>(null);
+  // `useNavigation` is generic, so the shape below is what types the event
+  // name. `NativeTabs` does emit `tabPress` — its own
+  // `NativeTabNavigationEventMap` declares it — but that type isn't exported
+  // from `expo-router/unstable-native-tabs`, so the alternative was casting
+  // the string and losing any check that it's spelled right.
+  const navigation = useNavigation<TabPressNavigation>();
+
+  /**
+   * Tapping the Home tab while already on Home returns to the top.
+   *
+   * `isFocused()` is the whole condition: `tabPress` also fires when the tab
+   * is pressed to *arrive* from another tab, and yanking the list to the top
+   * then would undo the position someone deliberately left it at.
+   *
+   * `NativeTabs` declares `canPreventDefault: false` for this event, which
+   * costs nothing here — there is no navigation to prevent when the tab you
+   * pressed is the one you are on.
+   */
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('tabPress', () => {
+      if (!navigation.isFocused()) return;
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const locationLabel = useMemo(() => {
     if (result.status !== 'ready') return '';
@@ -118,6 +160,7 @@ export default function DiscoverScreen() {
       />
 
       <FlatList
+        ref={listRef}
         style={styles.list}
         data={filteredShows}
         keyExtractor={(show) => show.id}
