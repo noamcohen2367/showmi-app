@@ -128,3 +128,29 @@ luminance, so re-derive the documented contrast ratios if the hue changes.
 **Do not deploy** until there is a real domain, a custom favicon, every mention
 of AI authorship removed, and a privacy policy, terms page and accessibility
 statement.
+
+**`app.json` carries a `UIApplicationSceneManifest` under `ios.infoPlist`, and
+it must stay.** iOS 26 turned "app has not adopted the UIScene lifecycle" from
+a warning into a trap: built against the iOS 26+ SDK, the app crashed on a
+real iOS 27 device the instant UIKit created the window — splash, then gone —
+while running fine on an iOS 17.5 simulator, where the check does not exist.
+Nothing in `node_modules` adopts scenes (Expo 57 / RN 0.86.3 still create the
+window the legacy way in `AppDelegate.swift`), so declaring the manifest is
+what satisfies the check. Remove it when Expo ships real scene support, not
+before.
+
+**`npx expo prebuild` wipes `DEVELOPMENT_TEAM` from the Xcode project.**
+Signing set by hand in Xcode does not survive a regeneration. `expo run:ios`
+re-applies it automatically, so this is a surprise rather than a problem —
+but do not go hunting in Xcode for settings that a prebuild just discarded.
+
+**Before release, remove `exp://**` from the Supabase redirect allow-list**
+(Authentication > URL Configuration). It was added only so sign-in could be
+tested from Expo Go, and it lets any Expo Go runtime anywhere receive a
+callback for this project. PKCE limits what that is worth — the code is
+useless without the verifier held on the requesting device — but it is far
+wider than a shipped app should carry. The release app needs only
+`showmi://**`.
+
+**Accounts collect personal data**, so the privacy policy above stops being a
+checklist item and becomes a prerequisite.
