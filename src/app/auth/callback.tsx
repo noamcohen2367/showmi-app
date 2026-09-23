@@ -26,14 +26,22 @@ export default function AuthCallbackScreen() {
   const { session, callbackError } = useAuth();
 
   useEffect(() => {
-    if (session) {
-      // `replace`, not `push`: this screen is a step in a process, and
-      // nobody should be able to navigate back into a spent callback.
-      router.replace('/');
-    }
+    if (!session) return;
+    // `dismissAll`, not `replace`: by now the stack is usually
+    // tabs → sign-in → callback, and replacing only swaps this screen out,
+    // leaving the completed sign-in form underneath for the back gesture to
+    // find. Dismissing unwinds the whole detour in one move.
+    //
+    // The fallback covers a cold start straight into this route, where there
+    // may be nothing beneath to dismiss to.
+    if (router.canDismiss()) router.dismissAll();
+    else router.replace('/');
   }, [session, router]);
 
   useEffect(() => {
+    // Back to the form, which reads `callbackError` from the same context
+    // and explains what went wrong. `replace` so a spent callback is not
+    // left in the history.
     if (callbackError) router.replace('/sign-in');
   }, [callbackError, router]);
 

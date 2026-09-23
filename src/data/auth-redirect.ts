@@ -13,7 +13,7 @@ import * as Linking from 'expo-linking';
 
 /**
  * Built at call time, not at module load. `createURL` resolves differently
- * depending on how the app is running — the `showmiv100://` scheme in a
+ * depending on how the app is running — the `showmi://` scheme in a
  * build, an `exp://.../--/` tunnel in Expo Go, an http origin on web — and
  * capturing it at import time would freeze whichever one happened to be
  * first.

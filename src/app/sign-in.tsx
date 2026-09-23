@@ -1,5 +1,6 @@
+import type { AuthError } from '@supabase/supabase-js';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useRouter } from 'expo-router';
+import { useIsFocused, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +21,39 @@ import { useTheme } from '@/hooks/use-theme';
 function looksLikeEmail(value: string): boolean {
   const trimmed = value.trim();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+}
+
+/**
+ * Hebrew for why a link could not be sent.
+ *
+ * Every failure used to collapse into "check your connection", which was
+ * actively misleading: it sent the user to look at their wi-fi while the
+ * real fault was on the server, and during development it hid the diagnosis
+ * completely. The cases below are the ones a person can act on. Anything
+ * else keeps its own code in the text — not pretty, but a support message
+ * saying `email_provider_disabled` can be searched for, while "try again"
+ * cannot.
+ */
+function sendFailureMessage(error: AuthError): string {
+  // No status at all means the request never reached Supabase — DNS, no
+  // signal, airplane mode. This is the only case where "check your
+  // connection" is honest advice.
+  if (!error.status) return 'אין חיבור לאינטרנט. בדוק את החיבור ונסה שוב.';
+
+  switch (error.code) {
+    case 'over_email_send_rate_limit':
+    case 'over_request_rate_limit':
+      return 'נשלחו יותר מדי בקשות. נסה שוב בעוד דקה.';
+    case 'email_address_invalid':
+      return 'כתובת המייל אינה תקינה.';
+    case 'validation_failed':
+      return 'כתובת המייל אינה תקינה.';
+    case 'email_provider_disabled':
+    case 'signup_disabled':
+      return 'התחברות במייל אינה זמינה כרגע.';
+    default:
+      return `לא הצלחנו לשלוח את הקישור (${error.code ?? error.status}).`;
+  }
 }
 
 type Phase =
@@ -43,17 +77,25 @@ type Phase =
 export default function SignInScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const isFocused = useIsFocused();
   const { session, callbackError, clearCallbackError } = useAuth();
 
   const [email, setEmail] = useState('');
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const [error, setError] = useState<string | null>(null);
 
-  // Covers both routes to a session: the user redeemed a link while this
-  // screen sat in the background, or signed in on another device.
+  /**
+   * Close if a session appears while this screen is the one on top.
+   *
+   * `isFocused` is load-bearing. The usual path puts `/auth/callback` above
+   * this screen, and that screen does the navigating; without the guard both
+   * would react to the same session at the same moment, and this one would
+   * pop whatever happened to be on top — the callback screen — leaving the
+   * user staring at a sign-in form they had just completed.
+   */
   useEffect(() => {
-    if (session) router.back();
-  }, [session, router]);
+    if (session && isFocused && router.canGoBack()) router.back();
+  }, [session, isFocused, router]);
 
   async function sendLink(address: string) {
     setPhase({ kind: 'sending' });
@@ -71,14 +113,7 @@ export default function SignInScreen() {
     }
 
     setPhase({ kind: 'idle' });
-    // 429 is the one a user hits by pressing again impatiently, and it is
-    // worth naming precisely — "try again" without saying how long reads as
-    // a bug rather than a limit.
-    setError(
-      sendError.status === 429
-        ? 'נשלחו יותר מדי בקשות. נסה שוב בעוד דקה.'
-        : 'לא הצלחנו לשלוח את הקישור. בדוק את החיבור ונסה שוב.',
-    );
+    setError(sendFailureMessage(sendError));
   }
 
   const trimmed = email.trim();
