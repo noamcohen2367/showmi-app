@@ -1,15 +1,15 @@
 {
   "expo": {
-    "name": "showmi_v1.0.0",
-    "slug": "showmi_v1.0.0",
+    "name": "showmi",
+    "slug": "showmi",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "showmiv100",
+    "scheme": "showmi",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.anonymous.showmi-v1.0.0"
+      "bundleIdentifier": "com.showmi.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +19,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.showmiv1.x0.x0"
+      "package": "com.showmi.app"
     },
     "web": {
       "output": "static",
@@ -39,7 +39,8 @@
       "expo-image",
       "expo-status-bar",
       "expo-web-browser",
-      "expo-secure-store"
+      "expo-secure-store",
+      "./plugins/with-ios-scene-lifecycle"
     ],
     "experiments": {
       "typedRoutes": true,
