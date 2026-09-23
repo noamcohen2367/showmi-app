@@ -67,9 +67,19 @@ service-role key.
   independently. A failed request is never cached.
 - "Suggested" / "new" / "trending" are simple rules, not personalization. The
   banner shows the soonest upcoming shows.
-- `src/data/watchlist-backend.ts` is still **in-memory** — the watchlist is
-  lost when the app closes. That file is the single seam to replace when user
-  accounts arrive.
+- `src/data/watchlist-backend.ts` holds two implementations and
+  `WatchlistProvider` picks between them: signed out the list is in memory
+  and lost when the app closes, signed in it is the `watchlist` table.
+  Whatever was saved while signed out is merged up on sign-in, local winning
+  a collision. A Supabase backend is bound to one user id at construction, so
+  it can never outlive the user it belongs to.
+- Writes are optimistic **and rolled back if the save fails**, with an alert.
+  `save()` rejecting means the change did not happen; nothing may treat it as
+  fire-and-forget. `useWatchlist().loadFailed` is likewise separate from an
+  empty list — over a network those are different situations, and the
+  watchlist screen says which one it is.
+- `src/data/shows.ts` still sends only `apikey`, and should. It reads the
+  public catalogue and touches no user-owned table, so it needs no session.
 
 ## Commands
 

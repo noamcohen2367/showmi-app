@@ -36,7 +36,7 @@ type Segment = 'want' | 'seen';
  */
 export default function WatchlistScreen() {
   const result = useHomeFeed();
-  const { wantIds, seenIds, customWant, customSeen, setStatus, addCustom, remove, ready } =
+  const { wantIds, seenIds, customWant, customSeen, setStatus, addCustom, remove, ready, loadFailed } =
     useWatchlist();
   const [segment, setSegment] = useState<Segment>('want');
   const [addSheetOpen, setAddSheetOpen] = useState(false);
@@ -72,7 +72,15 @@ export default function WatchlistScreen() {
           ]}
         />
 
-        {segment === 'want' ? (
+        {/* Said out loud rather than falling through to the empty state: an
+            account's list that failed to load looks exactly like an empty one,
+            and telling somebody they have saved nothing when in fact the
+            request failed is worse than showing nothing at all. */}
+        {loadFailed ? (
+          <ThemedText themeColor="textSecondary" style={styles.loadFailed}>
+            לא הצלחנו לטעון את הרשימה. בדוק את החיבור ונסה שוב.
+          </ThemedText>
+        ) : segment === 'want' ? (
           <WantList shows={want} ready={ready} onMarkSeen={(id) => setStatus(id, 'seen')} />
         ) : (
           <SeenList
@@ -279,6 +287,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 34,
     lineHeight: 40,
+  },
+  loadFailed: {
+    paddingTop: Spacing.five,
+    textAlign: 'center',
   },
   listContent: {
     gap: Spacing.four,

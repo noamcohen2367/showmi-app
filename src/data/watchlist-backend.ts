@@ -3,24 +3,23 @@
  *
  * Everything above this file (the `useWatchlist` context, the Home filter
  * bar, the watchlist screen) talks only to `WatchlistBackend` — it never
- * knows where the data physically lives. That's deliberate: this app is
- * getting user accounts with everything persisted in Supabase, and when
- * that happens the *only* file that should need rewriting is this one.
+ * knows where the data physically lives.
  *
- * Today's implementation is in-memory, which means:
+ * There are two implementations, and which one is in use depends on whether
+ * anybody is signed in:
  *
- *   THE WATCHLIST IS CLEARED WHEN THE APP IS CLOSED.
+ *  - **Signed out** — in memory, and so LOST WHEN THE APP CLOSES. Kept
+ *    rather than removed because the catalogue is open to everyone: someone
+ *    should be able to save a show before deciding whether to make an
+ *    account, and what they saved is carried up when they do.
+ *  - **Signed in** — the `watchlist` table, under row-level security that
+ *    confines every statement to `auth.uid()`.
  *
- * That is a known, temporary limitation, not a bug — there is no storage
- * dependency in this project yet (no AsyncStorage, no SQLite, no Supabase),
- * and adding one before the account system exists would mean writing a
- * local schema that Supabase would immediately replace.
- *
- * To swap in Supabase later: keep `WatchlistBackend`'s shape, replace
- * `inMemoryBackend` with one whose methods await the Supabase client, and
- * change the single `export const watchlistBackend =` line at the bottom.
- * `load()` is already async precisely so that swap needs no caller changes.
+ * `WatchlistProvider` picks between them, because it is the only thing that
+ * knows about the session.
  */
+
+import { supabase } from './supabase';
 
 /** Whether a saved show is one the user still wants to see, or has seen. */
 export type WatchStatus = 'want' | 'seen';
@@ -69,14 +68,16 @@ export function createCustomId(): string {
 }
 
 export type WatchlistBackend = {
-  /** Full current state. Async so a network-backed impl can drop straight in. */
+  /** Full current state. */
   load(): Promise<WatchlistState>;
   /**
    * Persist the full state. Called after every mutation.
    *
-   * Takes the whole map rather than a delta because that's what an
-   * in-memory store wants; a Supabase impl would translate this into
-   * per-row upserts/deletes internally rather than changing this signature.
+   * Takes the whole map rather than a delta because that is what a caller
+   * naturally has; the Supabase implementation works out the per-row writes
+   * itself. **Rejects if the write did not happen** — callers must treat a
+   * rejection as "the change was not saved" and undo their optimistic
+   * update, which is the whole reason this returns a promise.
    */
   save(state: WatchlistState): Promise<void>;
 };
@@ -96,4 +97,114 @@ function createInMemoryBackend(): WatchlistBackend {
   };
 }
 
-export const watchlistBackend: WatchlistBackend = createInMemoryBackend();
+/**
+ * The signed-out list. A single shared instance, so signing out and back in
+ * within one session does not silently resurrect a stale copy.
+ */
+export const inMemoryWatchlistBackend: WatchlistBackend = createInMemoryBackend();
+
+/** Exactly the columns this app reads; see `supabase/migrations/0002_watchlist.sql`. */
+type WatchlistRow = {
+  entry_id: string;
+  show_id: string | null;
+  status: WatchStatus;
+  custom_name: string | null;
+  custom_note: string | null;
+};
+
+function rowToEntry(row: WatchlistRow): WatchlistEntry {
+  // `custom_name` is what distinguishes the two kinds of row — the database
+  // enforces that exactly one of them is filled in.
+  return row.custom_name === null
+    ? { status: row.status }
+    : {
+        status: row.status,
+        custom: { name: row.custom_name, ...(row.custom_note ? { note: row.custom_note } : {}) },
+      };
+}
+
+function entryToRow(userId: string, entryId: string, entry: WatchlistEntry) {
+  return {
+    user_id: userId,
+    entry_id: entryId,
+    // A catalogue entry's id IS the show id — that is the invariant the
+    // table's check constraint enforces from the other side.
+    show_id: entry.custom ? null : entryId,
+    status: entry.status,
+    custom_name: entry.custom?.name ?? null,
+    custom_note: entry.custom?.note ?? null,
+  };
+}
+
+const sameEntry = (a: WatchlistEntry | undefined, b: WatchlistEntry | undefined) =>
+  a?.status === b?.status &&
+  a?.custom?.name === b?.custom?.name &&
+  a?.custom?.note === b?.custom?.note;
+
+/**
+ * The signed-in list, in Supabase.
+ *
+ * Bound to one user id at construction rather than looking the session up
+ * per call: the provider rebuilds this when the session changes, so a
+ * backend instance can never outlive the user it belongs to and write one
+ * person's rows under another's name.
+ */
+export function createSupabaseWatchlistBackend(userId: string): WatchlistBackend {
+  /**
+   * What the server is believed to hold. `save` diffs against this to find
+   * the rows that actually changed, instead of rewriting the whole list on
+   * every heart tap. Only advanced after a write fully succeeds, so a failed
+   * save leaves the next diff correct rather than silently dropping the rows
+   * it thought it had already sent.
+   */
+  let known: WatchlistState = {};
+
+  return {
+    async load() {
+      const { data, error } = await supabase
+        .from('watchlist')
+        .select('entry_id, show_id, status, custom_name, custom_note');
+
+      // No `.eq('user_id', ...)`: the select policy already restricts this to
+      // the caller's own rows, and a filter here would imply the safety comes
+      // from the client, which is exactly the wrong thing to believe.
+      if (error) throw error;
+
+      const state: Record<string, WatchlistEntry> = {};
+      for (const row of (data ?? []) as WatchlistRow[]) {
+        state[row.entry_id] = rowToEntry(row);
+      }
+      known = state;
+      return state;
+    },
+
+    async save(next) {
+      const changed = Object.keys(next).filter((id) => !sameEntry(next[id], known[id]));
+      const removed = Object.keys(known).filter((id) => !(id in next));
+
+      if (changed.length > 0) {
+        const { error } = await supabase
+          .from('watchlist')
+          .upsert(changed.map((id) => entryToRow(userId, id, next[id])), {
+            onConflict: 'user_id,entry_id',
+          });
+        if (error) throw error;
+      }
+
+      if (removed.length > 0) {
+        // `user_id` is redundant under RLS but stated anyway: delete is the
+        // one operation where a mistake is unrecoverable, and RLS refuses a
+        // foreign row by matching nothing rather than by failing — a silent
+        // no-op is a bad last line of defence.
+        const { error } = await supabase
+          .from('watchlist')
+          .delete()
+          .eq('user_id', userId)
+          .in('entry_id', removed);
+        if (error) throw error;
+      }
+
+      known = next;
+    },
+  };
+}
