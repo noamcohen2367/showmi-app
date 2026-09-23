@@ -1,4 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { Alert } from 'react-native';
 
 import {
@@ -23,6 +32,14 @@ type WatchlistContextValue = {
   toggleSaved: (showId: string) => void;
   /** Moves a saved show between the two sections. */
   setStatus: (showId: string, status: WatchStatus) => void;
+  /**
+   * Moves several shows at once.
+   *
+   * Not sugar for calling `setStatus` in a loop: that would be one network
+   * write per show, and each would have to be rolled back separately if the
+   * next one failed. This is a single change and a single write.
+   */
+  setStatusMany: (showIds: readonly string[], status: WatchStatus) => void;
   /**
    * Records a show that isn't in the catalogue. Returns the id it was filed
    * under, so a caller can act on it straight away.
@@ -54,18 +71,6 @@ const WatchlistContext = createContext<WatchlistContextValue | null>(null);
 const EMPTY: WatchlistState = {};
 
 /**
- * Holds the watchlist for the whole app.
- *
- * Mounted once in the root layout, above the router outlet, so the list is
- * shared by every screen that reads it (the Home filter bar's chip, the
- * watchlist screen, and later a save button on show cards) rather than each
- * keeping its own copy.
- *
- * All reads/writes go through `watchlistBackend` — see that file for why the
- * storage is deliberately behind a seam, and for the current in-memory
- * limitation.
- */
-/**
  * The list and how it got here, as one value.
  *
  * Deliberately not three booleans beside the data: "loading", "failed" and
@@ -77,6 +82,15 @@ type Loaded =
   | { phase: 'ready'; entries: WatchlistState }
   | { phase: 'failed' };
 
+/**
+ * Holds the watchlist for the whole app.
+ *
+ * Mounted once in the root layout, above the router outlet, so the list is
+ * shared by every screen that reads it — the Home save buttons and the
+ * watchlist screen — rather than each keeping its own copy.
+ *
+ * Which store it talks to depends on the session; see `watchlist-backend.ts`.
+ */
 export function WatchlistProvider({ children }: { children: ReactNode }) {
   const { user, ready: authReady } = useAuth();
   const [loaded, setLoaded] = useState<Loaded>({ phase: 'loading' });
@@ -84,6 +98,16 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   const state = loaded.phase === 'ready' ? loaded.entries : EMPTY;
   const ready = loaded.phase !== 'loading';
   const loadFailed = loaded.phase === 'failed';
+
+  /**
+   * The same entries as `state`, readable synchronously.
+   *
+   * React state is a snapshot of the render that read it, which is the wrong
+   * thing for a mutation to build on: two changes in one tick would both
+   * start from the same snapshot and the second would discard the first.
+   * Every mutation goes through `commit`, which reads and writes this.
+   */
+  const entriesRef = useRef<WatchlistState>(EMPTY);
 
   // `user.id`, not `user`: `onAuthStateChange` hands back a fresh user object
   // on every token refresh, so depending on the object itself would rebuild
@@ -123,9 +147,11 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         }
 
         if (cancelled) return;
+        entriesRef.current = merged;
         setLoaded({ phase: 'ready', entries: merged });
       } catch {
         if (cancelled) return;
+        entriesRef.current = EMPTY;
         setLoaded({ phase: 'failed' });
       }
     })();
@@ -145,15 +171,23 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
    * that no server has ever heard of, and the user would only find out on
    * their next device.
    *
-   * `previous` is passed in rather than read from state, because the helper
-   * that calls this derived `next` from exactly that snapshot.
+   * Takes a function of the *current* list rather than a ready-made next
+   * state, and reads that current list from a ref rather than from render
+   * state. That is what makes several mutations fired in the same tick
+   * compose instead of overwriting each other — marking three shows seen
+   * from the add sheet used to keep only one of them, because all three
+   * built their result from the same render-time snapshot.
    */
   const commit = useCallback(
-    async (previous: WatchlistState, next: WatchlistState) => {
+    async (change: (current: WatchlistState) => WatchlistState) => {
+      const previous = entriesRef.current;
+      const next = change(previous);
+      entriesRef.current = next;
       setLoaded({ phase: 'ready', entries: next });
       try {
         await backend.save(next);
       } catch {
+        entriesRef.current = previous;
         setLoaded({ phase: 'ready', entries: previous });
         Alert.alert('השינוי לא נשמר', 'בדוק את החיבור ונסה שוב.');
       }
@@ -179,26 +213,37 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       customWant: asItems(inSection('want', true)),
       customSeen: asItems(inSection('seen', true)),
       statusOf: (showId) => state[showId]?.status,
-      toggleSaved: (showId) => {
-        const next = { ...state };
-        if (next[showId]) delete next[showId];
-        else next[showId] = { status: 'want' };
-        void commit(state, next);
-      },
+      toggleSaved: (showId) =>
+        void commit((current) => {
+          const next = { ...current };
+          if (next[showId]) delete next[showId];
+          else next[showId] = { status: 'want' };
+          return next;
+        }),
       setStatus: (showId, status) =>
-        // Spreads the existing entry so moving a hand-typed show between
-        // sections doesn't drop the name the user typed.
-        void commit(state, { ...state, [showId]: { ...state[showId], status } }),
+        void commit((current) => ({
+          ...current,
+          // Spreads the existing entry so moving a hand-typed show between
+          // sections doesn't drop the name the user typed.
+          [showId]: { ...current[showId], status },
+        })),
+      setStatusMany: (showIds, status) =>
+        void commit((current) => {
+          const next = { ...current };
+          for (const showId of showIds) next[showId] = { ...next[showId], status };
+          return next;
+        }),
       addCustom: (entry, status) => {
         const id = createCustomId();
-        void commit(state, { ...state, [id]: { status, custom: entry } });
+        void commit((current) => ({ ...current, [id]: { status, custom: entry } }));
         return id;
       },
-      remove: (showId) => {
-        const next = { ...state };
-        delete next[showId];
-        void commit(state, next);
-      },
+      remove: (showId) =>
+        void commit((current) => {
+          const next = { ...current };
+          delete next[showId];
+          return next;
+        }),
     };
   }, [state, ready, loadFailed, commit]);
 
