@@ -62,6 +62,23 @@ const OnPhoto = {
 } as const;
 
 /* ─────────────────────────────────────────────────────────────────────────
+ * SEEN BADGE — the green chip on a show the user has already watched.
+ *
+ * One value for both themes, which is the exception the reasoning earns: the
+ * chip sits on show artwork, so what is behind it is whatever poster the API
+ * returned, not any surface the theme controls. It therefore has to carry its
+ * own contrast, and does — the glyph is `OnPhoto.text` white on this green,
+ * measured at 5.02:1, past the 3:1 WCAG asks of non-text graphics and past
+ * the 4.5:1 text minimum too.
+ *
+ * Lightening it is the thing to avoid, and by more than it looks. White on
+ * `#16A34A` — the obvious next step up — is 3.30:1, which fails text
+ * outright and leaves nothing spare for graphics; on `#22C55E` it is 2.28:1
+ * and fails both.
+ * ───────────────────────────────────────────────────────────────────────── */
+const Seen = '#15803D';
+
+/* ─────────────────────────────────────────────────────────────────────────
  * CATEGORY TINTS — the gradients behind the Search screen's category cards.
  *
  * These are the one place the app uses colours that are NOT the brand accent,
@@ -134,6 +151,8 @@ export const Colors = {
     // Android native tab bar and the web nav (sidebar/bottom bar) so the
     // selected tab gets a soft "pill" background instead of just a tint.
     primarySoft: softWash(Accent.onLight, Accent.softAlphaOnLight),
+    /** Fill of the "already seen" chip; see the `Seen` block above. */
+    seen: Seen,
     // Hyperlink text. Deliberately *not* the brand accent: a link that is
     // the same color as every selected-state tint stops reading as a link.
     // It lives here rather than inline in `ThemedText` (where it used to be
@@ -158,6 +177,8 @@ export const Colors = {
     // keeps enough contrast against a near-black background.
     primary: Accent.onDark,
     primarySoft: softWash(Accent.onDark, Accent.softAlphaOnDark),
+    /** Fill of the "already seen" chip; see the `Seen` block above. */
+    seen: Seen,
     onImage: OnPhoto.text,
     scrim: OnPhoto.scrim,
     // Brightened from the light theme's link blue for the same reason

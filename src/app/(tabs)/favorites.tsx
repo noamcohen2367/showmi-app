@@ -1,9 +1,17 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { GlassView } from 'expo-glass-effect';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import Animated, {
+  FadeIn,
+  LinearTransition,
+  ReduceMotion,
+  ZoomOut,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AddSeenSheet } from '@/components/add-seen-sheet';
+import { SeenCustomCard, SeenShowCard } from '@/components/seen-show-card';
 import { SegmentedPill } from '@/components/segmented-pill';
 import { ShowListItem } from '@/components/show-list-item';
 import { SwipeToSeen } from '@/components/swipe-to-seen';
@@ -16,6 +24,19 @@ import { useWatchlist, type CustomWatchlistItem } from '@/hooks/use-watchlist';
 import type { Show } from '@/types/show';
 
 type Segment = 'want' | 'seen';
+
+const ENTER_MS = 180;
+const EXIT_MS = 200;
+
+/**
+ * How the surviving cards close the gap a removed one leaves.
+ *
+ * A spring rather than a duration: the cards are settling into a new
+ * position, and a spring is what that reads as. Damped hard enough not to
+ * overshoot visibly — a grid of posters bouncing would be the "exaggerated
+ * animation" this project deliberately avoids.
+ */
+const REFLOW = LinearTransition.springify().damping(20).stiffness(180).reduceMotion(ReduceMotion.System);
 
 /**
  * Tab 3 — the watchlist (`app/(tabs)/favorites.tsx`).
@@ -35,9 +56,20 @@ type Segment = 'want' | 'seen';
  * render rather than erroring.
  */
 export default function WatchlistScreen() {
+  const theme = useTheme();
   const result = useHomeFeed();
-  const { wantIds, seenIds, customWant, customSeen, setStatus, addCustom, remove, ready, loadFailed } =
-    useWatchlist();
+  const {
+    wantIds,
+    seenIds,
+    customWant,
+    customSeen,
+    setStatus,
+    setStatusMany,
+    addCustom,
+    remove,
+    ready,
+    loadFailed,
+  } = useWatchlist();
   const [segment, setSegment] = useState<Segment>('want');
   const [addSheetOpen, setAddSheetOpen] = useState(false);
 
@@ -87,18 +119,40 @@ export default function WatchlistScreen() {
             shows={seen}
             custom={customSeen}
             ready={ready}
-            onAdd={() => setAddSheetOpen(true)}
+            onUnsee={(id) => setStatus(id, 'want')}
             onRemoveCustom={remove}
           />
         )}
       </SafeAreaView>
+
+      {/* Floating, and only over the "seen" list — it is the one place where
+          adding by hand makes sense, and a button that persisted across both
+          segments would imply it did something different in each.
+
+          `left`, not `insetInlineStart`: this one is pinned to a physical
+          side because that is what was asked for, and under `forceRTL` the
+          logical property would put it on the right. */}
+      {segment === 'seen' && !loadFailed ? (
+        <GlassView
+          glassEffectStyle="regular"
+          tintColor={theme.background}
+          style={[styles.fab, { backgroundColor: theme.background + 'D9' }]}>
+          <Pressable
+            onPress={() => setAddSheetOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="הוספת הצגה שראיתי"
+            style={({ pressed }) => [styles.fabPress, pressed && styles.pressed]}>
+            <Ionicons name="add" size={28} color={theme.primary} />
+          </Pressable>
+        </GlassView>
+      ) : null}
 
       <AddSeenSheet
         visible={addSheetOpen}
         onClose={() => setAddSheetOpen(false)}
         shows={allShows}
         seenIds={seenIds}
-        onAdd={(ids) => ids.forEach((id) => setStatus(id, 'seen'))}
+        onAdd={(ids) => setStatusMany(ids, 'seen')}
         onAddCustom={(name, note) => addCustom({ name, note }, 'seen')}
       />
     </ThemedView>
@@ -130,12 +184,19 @@ function WantList({
         החליקו שורה הצידה כדי לסמן שראיתם.
       </ThemedText>
 
+      {/* No `exiting` here, unlike the grid: `SwipeToSeen` already slides the
+          row off screen under the user's finger before this unmounts, and a
+          second exit animation would play after it had already gone. What is
+          missing is the other half — `layout`, so the rows below close the
+          gap instead of jumping up into it. */}
       {shows.map((show) => (
-        <SwipeToSeen key={show.id} onTriggered={() => onMarkSeen(show.id)}>
-          <ThemedView style={styles.row}>
-            <ShowListItem show={show} />
-          </ThemedView>
-        </SwipeToSeen>
+        <Animated.View key={show.id} layout={REFLOW}>
+          <SwipeToSeen onTriggered={() => onMarkSeen(show.id)}>
+            <ThemedView style={styles.row}>
+              <ShowListItem show={show} />
+            </ThemedView>
+          </SwipeToSeen>
+        </Animated.View>
       ))}
     </ScrollView>
   );
@@ -145,105 +206,72 @@ function SeenList({
   shows,
   custom,
   ready,
-  onAdd,
+  onUnsee,
   onRemoveCustom,
 }: {
   shows: Show[];
   custom: readonly CustomWatchlistItem[];
   ready: boolean;
-  onAdd: () => void;
+  onUnsee: (showId: string) => void;
   onRemoveCustom: (id: string) => void;
 }) {
-  const theme = useTheme();
-  const isEmpty = shows.length === 0 && custom.length === 0;
+  if (shows.length === 0 && custom.length === 0) {
+    return (
+      <EmptyState
+        icon="checkmark-done-outline"
+        title={ready ? 'עדיין לא סימנת הצגות' : 'טוען…'}
+        text="החליקו הצגה מרשימת הצפייה, או הוסיפו אחת ידנית."
+      />
+    );
+  }
 
   return (
-    <>
-      {/* Above the list rather than floating over it: this list can be empty
-          on a first visit, and a button that only appears once there is
-          something to scroll would hide the one action that fills it. */}
-      <Pressable
-        onPress={onAdd}
-        accessibilityRole="button"
-        style={({ pressed }) => [
-          styles.addButton,
-          { borderColor: theme.primary },
-          pressed && styles.pressed,
-        ]}>
-        <Ionicons name="add" size={18} color={theme.primary} />
-        <ThemedText type="smallBold" themeColor="primary">
-          הוספת הצגה שראיתי
+    <ScrollView contentContainerStyle={styles.gridContent} showsVerticalScrollIndicator={false}>
+      {/* The mirror of the swipe hint on the other list. Without it the tick
+          reads as a label rather than a control, and there would be no way
+          back out of this list at all. */}
+      {shows.length > 0 ? (
+        <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
+          לחצו על הוי כדי להחזיר לרוצה לראות.
         </ThemedText>
-      </Pressable>
+      ) : null}
 
-      {isEmpty ? (
-        <EmptyState
-          icon="checkmark-done-outline"
-          title={ready ? 'עדיין לא סימנת הצגות' : 'טוען…'}
-          text="החליקו הצגה מרשימת הצפייה, או הוסיפו אחת ידנית."
-        />
-      ) : (
-        <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
-          {shows.map((show) => (
-            // Deliberately not swipeable: the gesture only moves shows
-            // forward, and a swipe here would have to guess whether the user
-            // meant "un-see" or "remove".
-            <View key={show.id} style={styles.seenRow}>
-              <ShowListItem show={show} />
-            </View>
-          ))}
+      <View style={styles.grid}>
+        {/* Deliberately not swipeable, unlike the other list: that gesture
+            only moves shows forward, and a swipe in a grid has no obvious
+            direction to begin with.
 
-          {custom.map((item) => (
-            <CustomSeenRow key={item.id} item={item} onRemove={() => onRemoveCustom(item.id)} />
-          ))}
-        </ScrollView>
-      )}
-    </>
-  );
-}
+            `layout` is the half that makes removal read as removal: without
+            it the card vanishes and everything after it teleports into the
+            gap. `ZoomOut` shrinks the card away rather than fading it, which
+            in a grid looks like it was picked up off the shelf.
 
-/**
- * A hand-typed entry in the seen list.
- *
- * Its own row rather than `ShowListItem`, because there is no `Show` behind
- * it — no poster, no venue record, no showtimes, and nowhere to navigate to.
- * A glyph stands in for the missing artwork instead of a broken image, and
- * the row carries a delete button since a typo here can't be fixed by
- * un-saving a catalogue entry.
- */
-function CustomSeenRow({
-  item,
-  onRemove,
-}: {
-  item: CustomWatchlistItem;
-  onRemove: () => void;
-}) {
-  const theme = useTheme();
+            `ReduceMotion.System` on every one of them — the same as the
+            search screen's chips. Someone who has asked the OS for less
+            motion gets the result instantly instead of the movement. */}
+        {shows.map((show) => (
+          <Animated.View
+            key={show.id}
+            style={styles.cell}
+            entering={FadeIn.duration(ENTER_MS).reduceMotion(ReduceMotion.System)}
+            exiting={ZoomOut.duration(EXIT_MS).reduceMotion(ReduceMotion.System)}
+            layout={REFLOW}>
+            <SeenShowCard show={show} onUnsee={() => onUnsee(show.id)} />
+          </Animated.View>
+        ))}
 
-  return (
-    <View style={styles.customRow}>
-      <View style={[styles.customThumb, { backgroundColor: theme.backgroundElement }]}>
-        <Ionicons name="ticket-outline" size={22} color={theme.textSecondary} />
+        {custom.map((item) => (
+          <Animated.View
+            key={item.id}
+            style={styles.cell}
+            entering={FadeIn.duration(ENTER_MS).reduceMotion(ReduceMotion.System)}
+            exiting={ZoomOut.duration(EXIT_MS).reduceMotion(ReduceMotion.System)}
+            layout={REFLOW}>
+            <SeenCustomCard item={item} onRemove={() => onRemoveCustom(item.id)} />
+          </Animated.View>
+        ))}
       </View>
-
-      <View style={styles.customRowText}>
-        <ThemedText type="smallBold" numberOfLines={2}>
-          {item.name}
-        </ThemedText>
-        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-          {item.note ?? 'נוסף ידנית'}
-        </ThemedText>
-      </View>
-
-      <Pressable
-        onPress={onRemove}
-        accessibilityRole="button"
-        accessibilityLabel={`הסרת ${item.name}`}
-        hitSlop={Spacing.three}
-        style={({ pressed }) => [pressed && styles.pressed]}>
-        <Ionicons name="close" size={20} color={theme.textSecondary} />
-      </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -296,42 +324,46 @@ const styles = StyleSheet.create({
     gap: Spacing.four,
     paddingBottom: Spacing.five,
   },
+  gridContent: {
+    // Clears the floating button, so the last row is never stuck underneath it.
+    paddingBottom: Spacing.six + Spacing.four,
+    gap: Spacing.three,
+  },
+  hint: {
+    paddingBottom: Spacing.one,
+  },
+  cell: {
+    // 48% twice plus `space-between`, rather than 50% and a gap: two 50%
+    // columns and any gap between them overflow the row and wrap to one card
+    // per line, which is how the search grid once collapsed on every device.
+    width: '48%',
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    // `space-between` plus 48% cards rather than a `columnGap`: two columns
+    // and a gap overflow the row and wrap to one card per line.
+    justifyContent: 'space-between',
+    rowGap: Spacing.three,
+  },
+  fab: {
+    position: 'absolute',
+    // Physically left, as asked. `insetInlineStart` would put it on the right
+    // under `forceRTL`, which is the opposite of what was wanted.
+    left: Spacing.four,
+    bottom: BottomTabInset + Spacing.four,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    overflow: 'hidden',
+  },
+  fabPress: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   row: {
     borderRadius: Spacing.three,
-  },
-  seenRow: {
-    opacity: 0.6,
-  },
-  customRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-    opacity: 0.6,
-  },
-  customThumb: {
-    // Matches ShowListItem's poster footprint, so hand-typed rows line up
-    // with catalogue ones instead of sitting at a different indent.
-    width: 72,
-    aspectRatio: 2 / 3,
-    borderRadius: Spacing.two,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  customRowText: {
-    flex: 1,
-    gap: 2,
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.two,
-    paddingVertical: Spacing.three,
-    borderRadius: Spacing.three,
-    borderWidth: 1,
-    // Dashed, so it reads as "add something here" rather than as the screen's
-    // primary action — the primary action is still saving shows from Home.
-    borderStyle: 'dashed',
   },
   pressed: {
     opacity: 0.6,
