@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AnimatedGradientBackground } from '@/components/animated-gradient-background';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AuthProvider } from '@/hooks/use-auth';
+import { ProfileProvider } from '@/hooks/use-profile';
 import { WatchlistProvider } from '@/hooks/use-watchlist';
 
 SplashScreen.preventAutoHideAsync();
@@ -54,14 +55,19 @@ export default function RootLayout() {
             know whose rows to load before it loads any, so the session must
             already be resolved by the time it mounts. */}
         <AuthProvider>
-          {/* Above the Stack so the watchlist is shared by every screen that
-              reads it — the Home filter bar and the watchlist screen — rather
-              than each holding its own copy. */}
-          <WatchlistProvider>
-            <AnimatedGradientBackground />
-            <AnimatedSplashOverlay />
-            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: 'transparent' } }} />
-          </WatchlistProvider>
+          {/* Inside `AuthProvider` because it reads the signed-in user's own
+              row, and above the Stack because it also decides whether that
+              user is sent to finish signing up before they see anything. */}
+          <ProfileProvider>
+            {/* Above the Stack so the watchlist is shared by every screen that
+                reads it — the Home filter bar and the watchlist screen —
+                rather than each holding its own copy. */}
+            <WatchlistProvider>
+              <AnimatedGradientBackground />
+              <AnimatedSplashOverlay />
+              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: 'transparent' } }} />
+            </WatchlistProvider>
+          </ProfileProvider>
         </AuthProvider>
       </ThemeProvider>
     </GestureHandlerRootView>

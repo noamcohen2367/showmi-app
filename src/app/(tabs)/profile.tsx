@@ -12,6 +12,7 @@ import { ThemedView } from '@/components/themed-view';
 import { supabase } from '@/data/supabase';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/use-auth';
+import { useProfile } from '@/hooks/use-profile';
 import { useTheme } from '@/hooks/use-theme';
 
 type ProfileRow = {
@@ -48,6 +49,7 @@ export default function ProfileScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { user, ready } = useAuth();
+  const { profile } = useProfile();
   const [signingOut, setSigningOut] = useState(false);
 
   async function signOut() {
@@ -63,11 +65,13 @@ export default function ProfileScreen() {
   const accountRow: ProfileRow = {
     renderIcon: (color) => <SimpleLineIcons name="mustache" size={20} color={color} />,
     label: 'חשבון',
-    // `ready` is false only for the moment it takes to read the keychain.
-    // Showing "not signed in" during it would tell a returning user the
-    // wrong thing, so the row stays blank until the answer is known.
-    detail: ready ? (user?.email ?? 'התחברות') : undefined,
-    onPress: user ? undefined : () => router.push('/sign-in'),
+    // Prefers the username over the email: it is what other people see, and
+    // it is the thing this row now leads to editing. `ready` is false only
+    // for the moment it takes to read the keychain — showing "not signed in"
+    // during it would tell a returning user the wrong thing, so the row stays
+    // blank until the answer is known.
+    detail: ready ? (profile?.username ? `@${profile.username}` : (user?.email ?? 'התחברות')) : undefined,
+    onPress: user ? () => router.push('/edit-profile') : () => router.push('/sign-in'),
   };
 
   const rows = [accountRow, ...SETTINGS_ROWS];
