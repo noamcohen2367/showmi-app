@@ -35,11 +35,27 @@ export type WatchStatus = 'want' | 'seen';
  * note about where it was — so it gets its own small shape rather than a
  * `Show` with most of its fields faked or left empty.
  */
+/**
+ * When a hand-typed show was seen, and how precisely that is known.
+ *
+ * People remember "London, 2019" far more often than an exact day, and a
+ * field that only accepts a full date makes them either invent one or leave
+ * it blank. `precision` is what lets a year be stored as a real date — that
+ * year's 1 January — without the display then claiming a day nobody said.
+ */
+export type SeenOn = {
+  /** ISO `YYYY-MM-DD`. For `year` precision, always the 1st of January. */
+  date: string;
+  precision: 'year' | 'day';
+};
+
 export type CustomEntry = {
-  /** Free text, as typed. */
+  /** Free text, as typed. The only part that is required. */
   name: string;
   /** Optional "where" — a theatre, a city, a country. */
-  note?: string;
+  location?: string;
+  /** Optional "when". */
+  seenOn?: SeenOn;
 };
 
 export type WatchlistEntry = {
@@ -109,18 +125,31 @@ type WatchlistRow = {
   show_id: string | null;
   status: WatchStatus;
   custom_name: string | null;
-  custom_note: string | null;
+  custom_location: string | null;
+  seen_on: string | null;
+  seen_on_precision: 'year' | 'day' | null;
 };
+
+const SELECTED_COLUMNS =
+  'entry_id, show_id, status, custom_name, custom_location, seen_on, seen_on_precision';
 
 function rowToEntry(row: WatchlistRow): WatchlistEntry {
   // `custom_name` is what distinguishes the two kinds of row — the database
   // enforces that exactly one of them is filled in.
-  return row.custom_name === null
-    ? { status: row.status }
-    : {
-        status: row.status,
-        custom: { name: row.custom_name, ...(row.custom_note ? { note: row.custom_note } : {}) },
-      };
+  if (row.custom_name === null) return { status: row.status };
+
+  return {
+    status: row.status,
+    custom: {
+      name: row.custom_name,
+      ...(row.custom_location ? { location: row.custom_location } : {}),
+      // The database's own constraint guarantees these two are set together,
+      // so testing one is enough to trust the other.
+      ...(row.seen_on && row.seen_on_precision
+        ? { seenOn: { date: row.seen_on, precision: row.seen_on_precision } }
+        : {}),
+    },
+  };
 }
 
 function entryToRow(userId: string, entryId: string, entry: WatchlistEntry) {
@@ -132,14 +161,18 @@ function entryToRow(userId: string, entryId: string, entry: WatchlistEntry) {
     show_id: entry.custom ? null : entryId,
     status: entry.status,
     custom_name: entry.custom?.name ?? null,
-    custom_note: entry.custom?.note ?? null,
+    custom_location: entry.custom?.location ?? null,
+    seen_on: entry.custom?.seenOn?.date ?? null,
+    seen_on_precision: entry.custom?.seenOn?.precision ?? null,
   };
 }
 
 const sameEntry = (a: WatchlistEntry | undefined, b: WatchlistEntry | undefined) =>
   a?.status === b?.status &&
   a?.custom?.name === b?.custom?.name &&
-  a?.custom?.note === b?.custom?.note;
+  a?.custom?.location === b?.custom?.location &&
+  a?.custom?.seenOn?.date === b?.custom?.seenOn?.date &&
+  a?.custom?.seenOn?.precision === b?.custom?.seenOn?.precision;
 
 /**
  * The signed-in list, in Supabase.
@@ -163,7 +196,7 @@ export function createSupabaseWatchlistBackend(userId: string): WatchlistBackend
     async load() {
       const { data, error } = await supabase
         .from('watchlist')
-        .select('entry_id, show_id, status, custom_name, custom_note');
+        .select(SELECTED_COLUMNS);
 
       // No `.eq('user_id', ...)`: the select policy already restricts this to
       // the caller's own rows, and a filter here would imply the safety comes

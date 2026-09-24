@@ -17,8 +17,6 @@ type AddSeenSheetProps = {
   /** Ids already marked seen — excluded from the list. */
   seenIds: readonly string[];
   onAdd: (showIds: string[]) => void;
-  /** Records a show that isn't in the catalogue at all. */
-  onAddCustom: (name: string, note: string | undefined) => void;
 };
 
 /**
@@ -32,26 +30,24 @@ type AddSeenSheetProps = {
  * Multi-select and applied in one go, because the realistic use is filling in
  * several past shows at once rather than one.
  *
- * Only shows already in the catalogue can be picked. Recording a show that
- * isn't in it would mean storing a user-authored `Show` — a different data
- * shape, with no name, venue or poster to render — and that is a data-model
- * change rather than a screen.
+ * Catalogue shows only. A show that is not in it is recorded on its own
+ * screen (`app/add-seen.tsx`) rather than here — that one needs a name, a
+ * place and a date, and three text fields in a sheet fight the keyboard for
+ * the same half of the screen.
  */
-export function AddSeenSheet({ visible, onClose, shows, seenIds, onAdd, onAddCustom }: AddSeenSheetProps) {
+export function AddSeenSheet({ visible, onClose, shows, seenIds, onAdd }: AddSeenSheetProps) {
   const theme = useTheme();
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<string[]>([]);
-  const [note, setNote] = useState('');
 
-  // Reset the query, selection and note each time the sheet opens, so a
-  // dismissed edit never leaks into the next one.
+  // Reset the query and selection each time the sheet opens, so a dismissed
+  // edit never leaks into the next one.
   const [lastVisible, setLastVisible] = useState(visible);
   if (visible !== lastVisible) {
     setLastVisible(visible);
     if (visible) {
       setQuery('');
       setPicked([]);
-      setNote('');
     }
   }
 
@@ -72,14 +68,6 @@ export function AddSeenSheet({ visible, onClose, shows, seenIds, onAdd, onAddCus
       current.includes(showId) ? current.filter((id) => id !== showId) : [...current, showId],
     );
   }
-
-  const trimmedQuery = query.trim();
-  // Offer the free-text route whenever the typed name isn't already an exact
-  // match in the catalogue. Not just when the search comes up empty: a
-  // production abroad can easily share its name with one playing locally,
-  // and the user still means the one they saw.
-  const canAddCustom =
-    trimmedQuery.length > 0 && !shows.some((show) => show.name === trimmedQuery);
 
   const footer = (
     <>
@@ -109,44 +97,6 @@ export function AddSeenSheet({ visible, onClose, shows, seenIds, onAdd, onAddCus
           accessibilityLabel="חיפוש הצגה"
         />
       </View>
-
-      {/* The free-text route. Deliberately reuses the search field as its
-          input rather than adding a separate "new show" form: the user has
-          already typed the name looking for it, and asking them to retype it
-          somewhere else is the whole friction this is meant to remove. */}
-      {canAddCustom ? (
-        <View style={[styles.customBox, { borderColor: theme.primary }]}>
-          <ThemedText type="small" themeColor="textSecondary">
-            לא מהקטלוג? אפשר להוסיף כטקסט חופשי — הצגה מחו״ל, תיאטרון פרטי, או כל דבר אחר.
-          </ThemedText>
-
-          <TextInput
-            value={note}
-            onChangeText={setNote}
-            placeholder="איפה ראיתם? (רשות)"
-            placeholderTextColor={theme.textSecondary}
-            style={[styles.noteInput, { color: theme.text, borderColor: theme.backgroundSelected }]}
-            accessibilityLabel="היכן ראיתם את ההצגה"
-          />
-
-          <Pressable
-            onPress={() => {
-              onAddCustom(trimmedQuery, note.trim() || undefined);
-              onClose();
-            }}
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.customAdd,
-              { backgroundColor: theme.primary },
-              pressed && styles.pressed,
-            ]}>
-            <Ionicons name="add" size={16} color={theme.background} />
-            <ThemedText type="smallBold" style={{ color: theme.background }} numberOfLines={1}>
-              הוספת ״{trimmedQuery}״
-            </ThemedText>
-          </Pressable>
-        </View>
-      ) : null}
 
       <ScrollView style={styles.list} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {candidates.length === 0 ? (

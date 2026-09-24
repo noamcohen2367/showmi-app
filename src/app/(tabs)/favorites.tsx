@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { GlassView } from 'expo-glass-effect';
+import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, {
@@ -8,9 +8,8 @@ import Animated, {
   ReduceMotion,
   ZoomOut,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AddSeenSheet } from '@/components/add-seen-sheet';
 import { SeenCustomCard, SeenShowCard } from '@/components/seen-show-card';
 import { SegmentedPill } from '@/components/segmented-pill';
 import { ShowListItem } from '@/components/show-list-item';
@@ -38,6 +37,26 @@ const EXIT_MS = 200;
  */
 const REFLOW = LinearTransition.springify().damping(20).stiffness(180).reduceMotion(ReduceMotion.System);
 
+/** Diameter of the floating add button, needed to keep content clear of it. */
+const FAB_SIZE = 56;
+
+/**
+ * How far above the screen's bottom edge the tab bar's top sits.
+ *
+ * `BottomTabInset` is the bar itself and nothing else — a flat 50 on iOS. On
+ * any device with a home indicator the system also reserves ~34pt below it,
+ * which that constant knows nothing about, so anything positioned with it
+ * alone ends up roughly a third of the bar too low. That is why the add
+ * button looked glued to the tab bar.
+ *
+ * `useBottomTabBarHeight` would be the obvious answer and is not available:
+ * this app draws its tabs with `expo-router/unstable-native-tabs`, so
+ * `@react-navigation/bottom-tabs` is not a dependency at all.
+ */
+function useTabBarClearance() {
+  return BottomTabInset + useSafeAreaInsets().bottom;
+}
+
 /**
  * Tab 3 — the watchlist (`app/(tabs)/favorites.tsx`).
  *
@@ -57,6 +76,7 @@ const REFLOW = LinearTransition.springify().damping(20).stiffness(180).reduceMot
  */
 export default function WatchlistScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const result = useHomeFeed();
   const {
     wantIds,
@@ -64,14 +84,11 @@ export default function WatchlistScreen() {
     customWant,
     customSeen,
     setStatus,
-    setStatusMany,
-    addCustom,
     remove,
     ready,
     loadFailed,
   } = useWatchlist();
   const [segment, setSegment] = useState<Segment>('want');
-  const [addSheetOpen, setAddSheetOpen] = useState(false);
 
   // Memoised rather than computed inline: the `[]` fallback would be a fresh
   // array on every render, so `byId` below would rebuild its Map every time
@@ -87,10 +104,18 @@ export default function WatchlistScreen() {
 
   const want = resolve(wantIds);
   const seen = resolve(seenIds);
+  const clearance = useTabBarClearance();
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
+      {/* `edges` excludes the bottom deliberately. Padding the container
+          shortens the scroll *viewport*, so the list ends above the tab bar
+          and its last row is sliced off in a straight line with dead space
+          under it — the same mistake the search screen's category grid made.
+          The room the tab bar needs belongs to the scrolled *content*, added
+          per-list below, so cards pass under the bar instead of stopping at
+          it. */}
+      <SafeAreaView edges={['top']} style={styles.safeArea}>
         <ThemedText type="title" style={styles.title}>
           רשימת צפייה
         </ThemedText>
@@ -109,16 +134,24 @@ export default function WatchlistScreen() {
             and telling somebody they have saved nothing when in fact the
             request failed is worse than showing nothing at all. */}
         {loadFailed ? (
-          <ThemedText themeColor="textSecondary" style={styles.loadFailed}>
+          <ThemedText
+            themeColor="textSecondary"
+            style={[styles.loadFailed, { paddingBottom: clearance }]}>
             לא הצלחנו לטעון את הרשימה. בדוק את החיבור ונסה שוב.
           </ThemedText>
         ) : segment === 'want' ? (
-          <WantList shows={want} ready={ready} onMarkSeen={(id) => setStatus(id, 'seen')} />
+          <WantList
+            shows={want}
+            ready={ready}
+            clearance={clearance}
+            onMarkSeen={(id) => setStatus(id, 'seen')}
+          />
         ) : (
           <SeenList
             shows={seen}
             custom={customSeen}
             ready={ready}
+            clearance={clearance}
             onUnsee={(id) => setStatus(id, 'want')}
             onRemoveCustom={remove}
           />
@@ -129,32 +162,31 @@ export default function WatchlistScreen() {
           adding by hand makes sense, and a button that persisted across both
           segments would imply it did something different in each.
 
-          `left`, not `insetInlineStart`: this one is pinned to a physical
-          side because that is what was asked for, and under `forceRTL` the
-          logical property would put it on the right. */}
+          A solid accent disc, not glass. Glass was tried and came out as a
+          bare `+` floating on nothing: the tint was the theme background, so
+          in light mode it was white-on-white and the button had no visible
+          edge at all. A control the user has to guess at is worse than one
+          that looks less fashionable.
+
+          The glyph is `background` on `primary`, which inverts correctly by
+          itself — dark purple with a white `+` in light mode, light purple
+          with a black one in dark. Measured 9.71:1 and 7.95:1. */}
       {segment === 'seen' && !loadFailed ? (
-        <GlassView
-          glassEffectStyle="regular"
-          tintColor={theme.background}
-          style={[styles.fab, { backgroundColor: theme.background + 'D9' }]}>
-          <Pressable
-            onPress={() => setAddSheetOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel="הוספת הצגה שראיתי"
-            style={({ pressed }) => [styles.fabPress, pressed && styles.pressed]}>
-            <Ionicons name="add" size={28} color={theme.primary} />
-          </Pressable>
-        </GlassView>
+        <Pressable
+          onPress={() => router.push('/add-seen')}
+          accessibilityRole="button"
+          accessibilityLabel="הוספת הצגה שראיתי"
+          style={({ pressed }) => [
+            styles.fab,
+            // Clears the real bar — `BottomTabInset` alone forgets the home
+            // indicator, which is what left the disc looking stuck to it.
+            { backgroundColor: theme.primary, bottom: clearance + Spacing.three },
+            pressed && styles.pressed,
+          ]}>
+          <Ionicons name="add" size={30} color={theme.background} />
+        </Pressable>
       ) : null}
 
-      <AddSeenSheet
-        visible={addSheetOpen}
-        onClose={() => setAddSheetOpen(false)}
-        shows={allShows}
-        seenIds={seenIds}
-        onAdd={(ids) => setStatusMany(ids, 'seen')}
-        onAddCustom={(name, note) => addCustom({ name, note }, 'seen')}
-      />
     </ThemedView>
   );
 }
@@ -162,10 +194,13 @@ export default function WatchlistScreen() {
 function WantList({
   shows,
   ready,
+  clearance,
   onMarkSeen,
 }: {
   shows: Show[];
   ready: boolean;
+  /** Height of the tab bar plus the home indicator below it. */
+  clearance: number;
   onMarkSeen: (showId: string) => void;
 }) {
   if (shows.length === 0) {
@@ -174,12 +209,18 @@ function WantList({
         icon="bookmark-outline"
         title={ready ? 'אין כאן עדיין הצגות' : 'טוען…'}
         text="שמרו הצגה מהבית או מהחיפוש והיא תופיע כאן."
+        clearance={clearance}
       />
     );
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      contentContainerStyle={[
+        styles.listContent,
+        { paddingBottom: clearance + Spacing.five },
+      ]}
+      showsVerticalScrollIndicator={false}>
       <ThemedText type="small" themeColor="textSecondary">
         החליקו שורה הצידה כדי לסמן שראיתם.
       </ThemedText>
@@ -206,12 +247,15 @@ function SeenList({
   shows,
   custom,
   ready,
+  clearance,
   onUnsee,
   onRemoveCustom,
 }: {
   shows: Show[];
   custom: readonly CustomWatchlistItem[];
   ready: boolean;
+  /** Height of the tab bar plus the home indicator below it. */
+  clearance: number;
   onUnsee: (showId: string) => void;
   onRemoveCustom: (id: string) => void;
 }) {
@@ -221,12 +265,21 @@ function SeenList({
         icon="checkmark-done-outline"
         title={ready ? 'עדיין לא סימנת הצגות' : 'טוען…'}
         text="החליקו הצגה מרשימת הצפייה, או הוסיפו אחת ידנית."
+        clearance={clearance}
       />
     );
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.gridContent} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      contentContainerStyle={[
+        styles.gridContent,
+        // Tab bar, then the floating button sitting above it, then a gap on
+        // each side of it — so the last row clears the button rather than
+        // hiding behind it.
+        { paddingBottom: clearance + FAB_SIZE + Spacing.four + Spacing.four },
+      ]}
+      showsVerticalScrollIndicator={false}>
       {/* The mirror of the swipe hint on the other list. Without it the tick
           reads as a label rather than a control, and there would be no way
           back out of this list at all. */}
@@ -279,14 +332,22 @@ function EmptyState({
   icon,
   title,
   text,
+  clearance,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   text: string;
+  /**
+   * Height of the tab bar plus the home indicator. This view fills the
+   * screen and centres itself, and the screen now runs under the tab bar —
+   * without this the text would be centred against the full height and sit
+   * visibly low, partly behind the bar.
+   */
+  clearance: number;
 }) {
   const theme = useTheme();
   return (
-    <ThemedView style={styles.emptyState}>
+    <ThemedView style={[styles.emptyState, { paddingBottom: clearance }]}>
       <Ionicons name={icon} size={40} color={theme.textSecondary} />
       <ThemedText type="smallBold" style={styles.centered}>
         {title}
@@ -309,7 +370,10 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: Spacing.four,
     paddingTop: Spacing.five,
-    paddingBottom: BottomTabInset + Spacing.three,
+    // No `paddingBottom`, on purpose. Padding here shortens the scroll
+    // viewport rather than the scrolled content, which cuts the last row off
+    // in a straight line above the tab bar and leaves dead space beneath it.
+    // Each list adds its own bottom padding to its `contentContainerStyle`.
     gap: Spacing.three,
   },
   title: {
@@ -322,11 +386,12 @@ const styles = StyleSheet.create({
   },
   listContent: {
     gap: Spacing.four,
-    paddingBottom: Spacing.five,
+    // `paddingBottom` is applied at the call site — it depends on the device's
+    // home indicator, which no static value knows about.
   },
   gridContent: {
-    // Clears the floating button, so the last row is never stuck underneath it.
-    paddingBottom: Spacing.six + Spacing.four,
+    // `paddingBottom` is applied at the call site, for the same reason as
+    // `listContent` — plus it has to clear the floating button too.
     gap: Spacing.three,
   },
   hint: {
@@ -348,19 +413,23 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: 'absolute',
-    // Physically left, as asked. `insetInlineStart` would put it on the right
-    // under `forceRTL`, which is the opposite of what was wanted.
-    left: Spacing.four,
-    bottom: BottomTabInset + Spacing.four,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    overflow: 'hidden',
-  },
-  fabPress: {
-    flex: 1,
+    // `insetInlineEnd`, not `left`. React Native's `doLeftAndRightSwapInRTL`
+    // defaults to true, so a plain `left` is mirrored to the right under
+    // `forceRTL` — which is exactly what it did, putting this button on the
+    // wrong side. In RTL the inline-end edge IS the physical left one.
+    insetInlineEnd: Spacing.four,
+    // `bottom` is set at the call site from the measured tab bar clearance.
+    width: FAB_SIZE,
+    height: FAB_SIZE,
+    borderRadius: FAB_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
+    // Lifts the disc off the posters it floats over.
+    shadowColor: '#000000',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 6,
   },
   row: {
     borderRadius: Spacing.three,
