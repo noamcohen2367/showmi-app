@@ -11,11 +11,26 @@ import { Platform } from 'react-native';
  * BRAND ACCENT — the app's one accent color. Edit only this block to
  * re-tint the entire app; nothing outside this file hardcodes the accent.
  *
- * Two shades, not one, for the same reason the previous purple had two: a
- * single hex cannot clear 4.5:1 against both a white and a near-black
- * background. `Accent.onLight` is the deep shade used on light backgrounds,
- * `Accent.onDark` the soft peach used on dark ones. Both are shades of the
- * same warm peachy-orange ramp.
+ * Two shades, not one: a single hex cannot clear 4.5:1 against both a white
+ * and a near-black background. `Accent.onLight` is the deep shade used on
+ * light backgrounds, `Accent.onDark` the light one used on dark backgrounds.
+ *
+ * Both are purple, taken from the app icon so the product and the thing on
+ * the home screen are recognisably the same. `onLight` is the icon's own
+ * gradient end (`#55279D`); `onDark` is lifted from it far enough to read on
+ * near-black.
+ *
+ * Measured, not chosen by eye — the four constraints that pull against each
+ * other, all clearing 4.5:1:
+ *
+ *   onLight on #ffffff            9.71:1
+ *   onLight on its own 14% wash   7.60:1
+ *   onDark  on #000000            7.95:1
+ *   onDark  on its own 20% wash   6.23:1
+ *
+ * The wash pair is the one that bites, and has before: an earlier accent
+ * passed on white and then failed at 4.21:1 against a wash of itself, which
+ * is the state a selected pill is in.
  *
  * The alphas are the "soft wash" strength for the selected-pill background
  * (`primarySoft`). Kept here beside the hexes so the wash can never drift
@@ -29,10 +44,34 @@ import { Platform } from 'react-native';
  * are tuned to this specific hue's luminance and are not hue-agnostic.
  * ───────────────────────────────────────────────────────────────────────── */
 const Accent = {
-  onLight: '#9A3412',
-  onDark: '#FFB380',
+  onLight: '#55279D',
+  onDark: '#C084FC',
   softAlphaOnLight: 0.14,
   softAlphaOnDark: 0.2,
+} as const;
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * SECONDARY — the icon's cyan, used for links and nothing else.
+ *
+ * The icon is a purple field crossed by a cyan-to-magenta stroke, and this
+ * is that stroke's cyan end. It earns its place by being the one hue in the
+ * brand that is not the accent, which is exactly what a link needs: a link
+ * tinted the same colour as every selected state stops reading as a link.
+ *
+ * Two shades again, and here the need is starker than for the accent. The
+ * icon's literal cyan, `#6BF0FF`, measures **1.35:1 on white** — invisible.
+ * Cyan is a light hue; it has to be taken most of the way to teal before it
+ * can sit on a white page at all.
+ *
+ *   onLight #0E7490 on #ffffff    5.36:1
+ *   onDark  #22D3EE on #000000   11.62:1
+ *
+ * This also closes a failure that had been carried knowingly: the blue these
+ * replace measured 3.50:1 in light mode, below the 4.5:1 body-text minimum.
+ * ───────────────────────────────────────────────────────────────────────── */
+const Link = {
+  onLight: '#0E7490',
+  onDark: '#22D3EE',
 } as const;
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -88,7 +127,9 @@ const Seen = '#15803D';
  * never UI state — nothing selected, active, or interactive is ever tinted
  * with one.
  *
- * Deliberately no purple in the set.
+ * Deliberately no purple in the set — for a sharper reason now that the
+ * accent is purple than when it was not. A purple card would read as the
+ * selected one.
  *
  * Every pair is dark enough for white label text: the lightest stop of the
  * lightest pair still clears 4.5:1 against `OnPhoto.text`. If you add a pair,
@@ -98,7 +139,7 @@ const Seen = '#15803D';
  * sits on the gradient, not on the app's background.
  * ───────────────────────────────────────────────────────────────────────── */
 export const CategoryTints: readonly (readonly [string, string])[] = [
-  ['#9A3412', '#C2410C'], // terracotta — the accent's own family
+  ['#9A3412', '#C2410C'], // terracotta
   ['#115E59', '#0F766E'], // teal
   ['#1E3A8A', '#1D4ED8'], // deep blue
   ['#9F1239', '#BE123C'], // crimson
@@ -153,19 +194,13 @@ export const Colors = {
     primarySoft: softWash(Accent.onLight, Accent.softAlphaOnLight),
     /** Fill of the "already seen" chip; see the `Seen` block above. */
     seen: Seen,
-    // Hyperlink text. Deliberately *not* the brand accent: a link that is
-    // the same color as every selected-state tint stops reading as a link.
-    // It lives here rather than inline in `ThemedText` (where it used to be
-    // hardcoded as `#3c87f7`) so this file stays the only place colors live.
+    // Hyperlink text. Deliberately *not* the brand accent: a link the same
+    // colour as every selected-state tint stops reading as a link. See the
+    // `Link` block above for why it is cyan and why it needs two shades.
     //
-    // KNOWN AA FAILURE, carried over as-is: this blue measures 3.50:1 on
-    // `background`, under the 4.5:1 body-text minimum. It is the exact value
-    // that was already hardcoded in `ThemedText`, kept byte-identical here so
-    // moving it into the theme changed no pixels. It is currently unrendered
-    // — `type="linkPrimary"` is used by no screen (only the uncolored
-    // `type="link"` is, in `profile.tsx`) — so this is latent, not live.
-    // `#1D4ED8` (5.57:1) is the drop-in fix whenever that type gets used.
-    link: '#3C87F7',
+    // This replaces a blue that measured 3.50:1 here and was carried as a
+    // known AA failure; the cyan is 5.36:1.
+    link: Link.onLight,
   },
   dark: {
     text: '#ffffff',
@@ -181,9 +216,10 @@ export const Colors = {
     seen: Seen,
     onImage: OnPhoto.text,
     scrim: OnPhoto.scrim,
-    // Brightened from the light theme's link blue for the same reason
-    // `primary` is — `#3C87F7` on near-black is below 4.5:1.
-    link: '#7FB0FF',
+    // Brighter than the light theme's cyan for the same reason `primary` is
+    // lighter here: the light-mode value is a deep teal, and a deep teal on
+    // near-black is unreadable.
+    link: Link.onDark,
   },
 } as const;
 

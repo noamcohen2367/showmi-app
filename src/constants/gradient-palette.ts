@@ -10,30 +10,35 @@
  * ranges were chosen, then checked, against WCAG AA (4.5:1) for
  * `textSecondary` (the app's *lowest*-contrast text token) sitting directly
  * on the *peak* of the animation with no card/glass backing underneath it —
- * the worst case that can occur. Ratios found; keep new peaks under these
- * bounds if you tune the ranges further:
+ * the worst case that can occur.
  *
- *  - Light, top stop, alpha 0.13 peak → bg ≈ rgb(242,229,224) → 4.82:1
- *  - Dark,  top stop, alpha 0.34 peak → bg ≈ rgb(87,61,44)    → 4.78:1
- *  - Light, mid stop,  alpha 0.06 peak → bg ≈ rgb(249,243,241) → 5.41:1
- *  - Dark,  mid stop,  alpha 0.15 peak → bg ≈ rgb(38,27,19)    → 8.08:1
+ * IMPORTANT — these alphas are tuned to the accent's *luminance*, so they do
+ * not survive a hue change unedited, and the project has already been bitten
+ * by that twice. The headroom for each accent, measured:
+ *
+ *   peachy-orange  light α≈0.165   dark α≈0.360
+ *   purple (now)   light α≈0.155   dark α≈0.440
+ *
+ * Dark mode has far more room under a purple accent than under an orange
+ * one — purple is the much less luminous hue, so the same alpha darkens the
+ * wash instead of lightening it — which is why the dark ranges below return
+ * to the values they held the last time the accent was purple. Light mode
+ * has slightly *less* room and keeps its current, already-safe peaks.
+ *
+ * The four peaks actually shipped below, measured against the purple accent:
+ *
+ *   Light, top, α 0.13 → bg rgb(233,227,242) → 4.73:1
+ *   Light, mid, α 0.06 → bg rgb(245,242,249) → 5.36:1
+ *   Dark,  top, α 0.40 → bg rgb( 77, 53,101) → 5.01:1
+ *   Dark,  mid, α 0.18 → bg rgb( 35, 24, 45) → 8.13:1
  *
  * (`theme.text`/`theme.textSecondary` on the *bottom* stop — solid
  * `theme.background` — trivially pass, since that's the same background
  * every screen already renders text on today.)
  *
- * IMPORTANT — these alphas are tuned to the accent's *luminance*, so they do
- * not survive a hue change unedited. When the accent was purple, dark mode
- * ran at a 0.40 top-stop peak; the warm peachy-orange that replaced it is a
- * far more luminous hue, and at that same 0.40 the dark-mode wash lightened
- * to the point that `textSecondary` fell to 3.89:1 — a real AA failure, not
- * a rounding one. The dark ranges below are reduced accordingly (top
- * 0.30→0.26 / 0.40→0.34, mid 0.12→0.10 / 0.18→0.15). Measured headroom for
- * the current accent: light fails above α≈0.165, dark above α≈0.360.
- *
- * To re-derive after changing `Accent` in `theme.ts`: composite
- * `primary` over `background` at each peak alpha, then compute the WCAG 2.1
- * contrast ratio of `textSecondary` against that result.
+ * To re-derive after changing `Accent` in `theme.ts`: composite `primary`
+ * over `background` at each peak alpha, then compute the WCAG 2.1 contrast
+ * ratio of `textSecondary` against that result.
  */
 
 /** One leg of the ping-pong ambient loop; a full cycle (0→1→0) is 2× this. */
@@ -44,11 +49,11 @@ export const CROSSFADE_DURATION_MS = 500;
 
 export const LIGHT_TOP_ALPHA: readonly [number, number] = [0.08, 0.13];
 export const LIGHT_MID_ALPHA: readonly [number, number] = [0.03, 0.06];
-// Lowered from [0.3, 0.4] / [0.12, 0.18] when the accent moved from purple to
-// the (much more luminous) peachy-orange — see the AA note in this file's
-// doc comment above.
-export const DARK_TOP_ALPHA: readonly [number, number] = [0.26, 0.34];
-export const DARK_MID_ALPHA: readonly [number, number] = [0.1, 0.15];
+// Back to the pre-orange values now that the accent is purple again: the
+// 0.40 peak measures well inside the α≈0.440 ceiling derived above, where
+// under the orange accent it had fallen to 3.89:1.
+export const DARK_TOP_ALPHA: readonly [number, number] = [0.3, 0.4];
+export const DARK_MID_ALPHA: readonly [number, number] = [0.12, 0.18];
 
 /** Gentle drift of where the top→bottom transition sits, for both themes. */
 export const MID_LOCATION_RANGE: readonly [number, number] = [0.45, 0.62];
