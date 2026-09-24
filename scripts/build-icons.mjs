@@ -46,7 +46,24 @@ const SIZE = 1024;
 const ANDROID_SAFE = 0.62;
 
 const manifest = JSON.parse(readFileSync(`${ICON_DIR}/icon.json`, 'utf8'));
-const layers = manifest.groups[0].layers;
+
+/**
+ * Every visible layer, across every group, in the order Icon Composer lists
+ * them (front first).
+ *
+ * Two things here were learned the hard way, from a logo whose first render
+ * came out as an unrecognisable blob:
+ *
+ *  - **`hidden` has to be honoured.** A designer turning a layer off in Icon
+ *    Composer leaves it in the file with `hidden: true`. Drawing it anyway
+ *    put a shape scaled 12× over the whole icon.
+ *  - **There can be more than one group.** Reading `groups[0]` silently drops
+ *    everything in the rest.
+ */
+const layers = manifest.groups
+  .filter((group) => !group.hidden)
+  .flatMap((group) => group.layers)
+  .filter((layer) => !layer.hidden);
 
 function readLayer(name) {
   const raw = readFileSync(`${ICON_DIR}/Assets/${name}`, 'utf8');

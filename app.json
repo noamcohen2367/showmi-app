@@ -13,7 +13,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#791ABE",
+        "backgroundColor": "#942192",
         "foregroundImage": "./assets/images/showmi-android-foreground.png",
         "backgroundImage": "./assets/images/showmi-android-background.png",
         "monochromeImage": "./assets/images/showmi-android-monochrome.png"
@@ -30,7 +30,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#791ABE",
+          "backgroundColor": "#942192",
           "image": "./assets/images/showmi-splash-icon.png",
           "imageWidth": 120
         }
