@@ -18,20 +18,31 @@ const AUTO_ADVANCE_INTERVAL_MS = 2000;
 const BANNER_ASPECT_RATIO = 2;
 
 /**
- * How much of the *next* promo stays visible past the edge of the current
- * one. The reference's hero carousel shows this sliver deliberately: it's
- * what tells you the card is swipeable at all, which a full-bleed paging
- * banner has to rely on the dots alone to communicate.
+ * How far the hero card sits in from the screen edges — the same on both,
+ * which is the point.
+ *
+ * This used to be paired with a 20pt sliver of the next card parked past one
+ * edge. That sliver was an affordance, but it also made the banner
+ * asymmetric: inset on one side, inset plus sliver on the other, so it never
+ * looked like it reached either edge properly. The sliver is gone and the
+ * card now fills everything between the two insets.
  */
-const PEEK_WIDTH = 20;
-
-/** How far the hero card sits in from the screen edges. */
 const SIDE_INSET = Spacing.three;
 
-/** Gap between one hero card and the next. */
+/**
+ * Gap between one hero card and the next. Only ever seen mid-swipe now —
+ * there is no sliver of the next card parked at the edge for it to separate.
+ */
 const CARD_GAP = Spacing.two;
 
-/** Corner radius of the hero card — the reference's ~20-24px treatment. */
+/**
+ * Corner radius of the hero card. Reads as a corner because the inset above
+ * leaves margin outside it to read against.
+ *
+ * The sliver of the next card that used to hint at swipeability is gone, so
+ * that affordance now rests on the dots below and on the auto-advance, which
+ * demonstrates the movement within seconds of the screen opening.
+ */
 const CARD_RADIUS = Spacing.four;
 
 type PromoBannerProps = {
@@ -92,9 +103,8 @@ export function PromoBanner({ promos }: PromoBannerProps) {
     if (containerWidth === 0) return;
     // Recomputed here rather than read from the `const` below, so this stays
     // correct no matter where in the body that value ends up living. One
-    // "page" is the snap interval (card + gap), not the viewport width —
-    // those stopped being the same thing once the card gained its peek.
-    const pageWidth = containerWidth - PEEK_WIDTH + CARD_GAP;
+    // "page" is the snap interval — a card plus the gap that follows it.
+    const pageWidth = containerWidth + CARD_GAP;
     // `.value` on a reanimated SharedValue is an intentionally mutable ref
     // (that's the whole API), not React state; this rule doesn't know the
     // difference from an effect dependency that's actually meant to stay
@@ -112,10 +122,9 @@ export function PromoBanner({ promos }: PromoBannerProps) {
   // Yoga does on native. So the height is computed here instead, once, from
   // the same measured width, and applied explicitly everywhere it's needed
   // (the list itself, each slide, the image) rather than left to cascade.
-  // The card is narrower than the viewport by exactly the sliver of the next
-  // card left showing, so `cardWidth + CARD_GAP` is both the snap interval
-  // and what one "page" means to the auto-advance timer below.
-  const cardWidth = containerWidth - PEEK_WIDTH;
+  // A card is exactly the viewport, so `cardWidth + CARD_GAP` is both the
+  // snap interval and what one "page" means to the auto-advance timer below.
+  const cardWidth = containerWidth;
   const cardHeight = cardWidth / BANNER_ASPECT_RATIO;
   const snapInterval = cardWidth + CARD_GAP;
 
@@ -125,8 +134,8 @@ export function PromoBanner({ promos }: PromoBannerProps) {
           happen *inside* it: `onLayout` reports the border box, which would
           include that padding and make every width below `SIDE_INSET * 2`
           too wide. Measuring the inner track instead keeps `cardWidth`,
-          `snapInterval` and `getItemLayout` all derived from the same
-          number the list actually has to work with — which is what makes
+          `snapInterval` and `getItemLayout` all derived from the same number
+          the list actually has to work with — which is what makes
           `scrollToIndex` from the auto-advance land exactly on a card. */}
       <View onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}>
         {containerWidth > 0 && (
@@ -190,10 +199,9 @@ function PromoDot({ index, activeIndex }: PromoDotProps) {
 
 const styles = StyleSheet.create({
   container: {
-    // No `aspectRatio` any more: the card no longer fills the container
-    // (it's inset by `PEEK_WIDTH`) and the dots now sit *below* it rather
-    // than floating over it, so the container has to size to its content
-    // instead of dictating a fixed shape to it.
+    // No `aspectRatio`: the dots sit *below* the card rather than floating
+    // over it, so the container has to size to its content instead of
+    // dictating a fixed shape to it.
     gap: Spacing.two,
     paddingHorizontal: SIDE_INSET,
   },
