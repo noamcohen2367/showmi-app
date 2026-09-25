@@ -98,7 +98,11 @@ export function AddSeenSheet({ visible, onClose, shows, seenIds, onAdd }: AddSee
         />
       </View>
 
-      <ScrollView style={styles.list} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={styles.list}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive">
         {candidates.length === 0 ? (
           <ThemedText type="small" themeColor="textSecondary" style={styles.empty}>
             {shows.length === seenIds.length

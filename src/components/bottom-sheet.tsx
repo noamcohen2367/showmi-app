@@ -1,4 +1,12 @@
-import { Modal, Pressable, StyleSheet, View, type ViewProps } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+  type ViewProps,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from './themed-text';
@@ -38,19 +46,39 @@ export function BottomSheet({ visible, onClose, title, footer, children, style, 
           reason this is a Pressable rather than a plain View. */}
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="סגירה" />
 
-      <View style={[styles.sheet, { backgroundColor: theme.background }, style]} {...rest}>
-        <SafeAreaView edges={['bottom']}>
-          <View style={[styles.grabber, { backgroundColor: theme.backgroundSelected }]} />
+      {/* The sheet used to be `position: absolute; bottom: 0`, which is why
+          the keyboard covered it: an absolutely positioned element is outside
+          the layout `KeyboardAvoidingView` adjusts, so it stayed pinned to
+          the screen's bottom while the keyboard rose over it — hiding the
+          field being typed into and the footer's buttons with it.
 
-          <ThemedText type="subtitle" style={styles.title}>
-            {title}
-          </ThemedText>
+          It is now an ordinary flex child pushed to the end of a container
+          that fills the screen, which is a layout the keyboard *can* move.
 
-          <View style={styles.body}>{children}</View>
+          `padding` on iOS and nothing on Android: Android resizes the window
+          itself (`adjustResize` in the manifest), and adding padding on top
+          of that pushes the sheet twice as far as the keyboard is tall. */}
+      <KeyboardAvoidingView
+        style={styles.fill}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        pointerEvents="box-none">
+        <View style={[styles.sheet, { backgroundColor: theme.background }, style]} {...rest}>
+          <SafeAreaView edges={['bottom']} style={styles.shrinkable}>
+            <View style={[styles.grabber, { backgroundColor: theme.backgroundSelected }]} />
 
-          {footer ? <View style={styles.footer}>{footer}</View> : null}
-        </SafeAreaView>
-      </View>
+            <ThemedText type="subtitle" style={styles.title}>
+              {title}
+            </ThemedText>
+
+            {/* `shrinkable` on the body as well: without it a scrolling child
+                claims its full content height and pushes the footer off the
+                bottom instead of scrolling inside what is left. */}
+            <View style={[styles.body, styles.shrinkable]}>{children}</View>
+
+            {footer ? <View style={styles.footer}>{footer}</View> : null}
+          </SafeAreaView>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -101,11 +129,18 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
+  fill: {
+    flex: 1,
+    // Pushes the sheet to the bottom edge the way `position: absolute` used
+    // to, but as a layout the keyboard can act on.
+    justifyContent: 'flex-end',
+  },
+  // Lets the body scroll inside the space the keyboard leaves rather than
+  // demanding its full height and shoving the footer out of view.
+  shrinkable: {
+    flexShrink: 1,
+  },
   sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
     maxHeight: '85%',
     borderTopLeftRadius: Spacing.four,
     borderTopRightRadius: Spacing.four,
