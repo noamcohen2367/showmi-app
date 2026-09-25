@@ -151,6 +151,61 @@ export async function fetchPublicProfile(username: string): Promise<PublicProfil
   return { id: row.id, username: row.username, fullName: row.full_name };
 }
 
+/**
+ * Finds people by username or name.
+ *
+ * Searches `public_profiles`, so somebody who has not opened their profile
+ * is simply not findable — which is the whole meaning of the switch.
+ *
+ * Capped, and not paginated. A result list long enough to need paging is a
+ * list nobody is reading; somebody looking for a person either sees them in
+ * the first handful or types more.
+ */
+export async function searchProfiles(query: string, limit = 20): Promise<PublicProfile[]> {
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return [];
+
+  // `%` and `_` are wildcards to `ilike`, so a user typing either would
+  // otherwise be running a pattern rather than a search.
+  const escaped = trimmed.replace(/[%_]/g, (char) => `\\${char}`);
+
+  const { data, error } = await supabase
+    .from('public_profiles')
+    .select('id, username, full_name')
+    .or(`username.ilike.%${escaped}%,full_name.ilike.%${escaped}%`)
+    .limit(limit);
+
+  if (error) throw error;
+
+  return ((data ?? []) as { id: string; username: string; full_name: string | null }[]).map(
+    (row) => ({ id: row.id, username: row.username, fullName: row.full_name }),
+  );
+}
+
+/**
+ * Usernames for a set of user ids, for linking review authors to profiles.
+ *
+ * A review stores its author's *display name*, which is not addressable —
+ * and deliberately so, since it has to survive whether or not that person's
+ * profile is open. This resolves the ids that do have an open profile; the
+ * rest simply render as unlinked text, which is the correct outcome rather
+ * than a missing one.
+ */
+export async function fetchUsernamesFor(userIds: string[]): Promise<Map<string, string>> {
+  if (userIds.length === 0) return new Map();
+
+  const { data, error } = await supabase
+    .from('public_profiles')
+    .select('id, username')
+    .in('id', userIds);
+
+  if (error) throw error;
+
+  return new Map(
+    ((data ?? []) as { id: string; username: string }[]).map((row) => [row.id, row.username]),
+  );
+}
+
 export type PublicSeen = {
   /** Catalogue show ids, to be resolved against the feed every screen uses. */
   showIds: string[];

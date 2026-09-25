@@ -9,6 +9,7 @@ import { ThemedText } from './themed-text';
 
 import { priceVerdictLabel } from '@/constants/review-tags';
 import { Spacing } from '@/constants/theme';
+import { fetchUsernamesFor } from '@/data/profile';
 import { fetchReviews, reportReview, summarise, type Review } from '@/data/reviews';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
@@ -20,7 +21,13 @@ import { useTheme } from '@/hooks/use-theme';
  */
 type Loaded =
   | { phase: 'loading' }
-  | { phase: 'ready'; reviews: Review[] }
+  /**
+   * `usernames` maps author ids to handles, and is deliberately partial: a
+   * review stores its author's display name, which is not addressable, and
+   * only authors who opened their profile have one to link to. Those missing
+   * render as plain text — the correct outcome, not a failure.
+   */
+  | { phase: 'ready'; reviews: Review[]; usernames: Map<string, string> }
   | { phase: 'failed' };
 
 /**
@@ -55,7 +62,17 @@ export function ReviewSection({ showId, showName }: { showId: string; showName: 
       setState({ phase: 'loading' });
       try {
         const fetched = await fetchReviews(showId);
-        if (!cancelled) setState({ phase: 'ready', reviews: fetched });
+        // Looked up after the reviews rather than alongside: the ids are not
+        // known until they arrive, and a failure here must not cost the
+        // reviews themselves.
+        let usernames = new Map<string, string>();
+        try {
+          usernames = await fetchUsernamesFor([...new Set(fetched.map((r) => r.userId))]);
+        } catch {
+          // Names stay unlinked, which is the same as an author with a
+          // closed profile — nothing on screen is missing.
+        }
+        if (!cancelled) setState({ phase: 'ready', reviews: fetched, usernames });
       } catch {
         if (!cancelled) setState({ phase: 'failed' });
       }
@@ -136,7 +153,11 @@ export function ReviewSection({ showId, showName }: { showId: string; showName: 
           {/* The user's own first, always. It is the one they came to check. */}
           {mine ? <ReviewCard review={mine} isMine /> : null}
           {others.map((review) => (
-            <ReviewCard key={review.id} review={review} />
+            <ReviewCard
+              key={review.id}
+              review={review}
+              username={state.phase === 'ready' ? state.usernames.get(review.userId) : undefined}
+            />
           ))}
         </View>
       )}
@@ -153,8 +174,18 @@ export function ReviewSection({ showId, showName }: { showId: string; showName: 
   );
 }
 
-function ReviewCard({ review, isMine = false }: { review: Review; isMine?: boolean }) {
+function ReviewCard({
+  review,
+  isMine = false,
+  username,
+}: {
+  review: Review;
+  isMine?: boolean;
+  /** Present only when this author's profile is open to be linked to. */
+  username?: string;
+}) {
   const theme = useTheme();
+  const router = useRouter();
   const { user } = useAuth();
   const [reported, setReported] = useState(false);
 
@@ -184,9 +215,22 @@ function ReviewCard({ review, isMine = false }: { review: Review; isMine?: boole
     <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
       <View style={styles.cardHead}>
         <View style={styles.author}>
-          <ThemedText type="smallBold" numberOfLines={1}>
-            {isMine ? 'הביקורת שלי' : (review.authorName ?? 'משתמש showmi')}
-          </ThemedText>
+          {username && !isMine ? (
+            <Pressable
+              onPress={() => router.push(`/u/${username}`)}
+              accessibilityRole="link"
+              accessibilityLabel={`הפרופיל של ${review.authorName ?? username}`}
+              hitSlop={Spacing.one}
+              style={({ pressed }) => pressed && styles.pressed}>
+              <ThemedText type="smallBold" themeColor="primary" numberOfLines={1}>
+                {review.authorName ?? username}
+              </ThemedText>
+            </Pressable>
+          ) : (
+            <ThemedText type="smallBold" numberOfLines={1}>
+              {isMine ? 'הביקורת שלי' : (review.authorName ?? 'משתמש showmi')}
+            </ThemedText>
+          )}
           <StarRating value={review.rating} size={14} />
         </View>
 

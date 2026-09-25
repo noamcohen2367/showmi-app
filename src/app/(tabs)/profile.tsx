@@ -74,7 +74,13 @@ export default function ProfileScreen() {
     onPress: user ? () => router.push('/edit-profile') : () => router.push('/sign-in'),
   };
 
-  const rows = [accountRow, ...SETTINGS_ROWS];
+  const peopleRow: ProfileRow = {
+    renderIcon: (color) => <Ionicons name="people-outline" size={20} color={color} />,
+    label: 'אנשים',
+    onPress: () => router.push('/people'),
+  };
+
+  const rows = [accountRow, peopleRow, ...SETTINGS_ROWS];
 
   return (
     <ThemedView style={styles.container}>
