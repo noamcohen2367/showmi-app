@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ReviewSection } from '@/components/review-section';
 import { SaveButton } from '@/components/save-button';
 import { ShowPoster } from '@/components/show-poster';
 import { ShowtimePickerSheet } from '@/components/showtime-picker-sheet';
@@ -200,6 +201,11 @@ function ShowDetail({ show }: { show: Show }) {
                 : 'אין מועדים זמינים כרגע'}
             </ThemedText>
           </DetailRow>
+
+          {/* Last, below the facts. Somebody arriving at a show wants to know
+              what it is and when it plays before they want other people's
+              opinions of it. */}
+          <ReviewSection showId={show.id} showName={show.name} />
         </View>
       </ScrollView>
 
